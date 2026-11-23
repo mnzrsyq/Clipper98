@@ -1,22 +1,20 @@
 # Cara Pakai Clipper98
 
-## Siapkan rilis di Windows
+## Siapkan aplikasi di Windows
 
-1. Pasang .NET 8 SDK x64, Git, dan GitHub CLI (`gh`).
-2. Jalankan `gh auth login` dan pastikan akun GitHub yang aktif adalah `mnzrsyq`.
-3. Jalankan `Release-Clipper98.bat` untuk membangun aplikasi, mengunduh tools, membuat folder `Clipper98-v1.0.0` dan ZIP, lalu menerbitkan ZIP ke GitHub Releases.
-4. Jika hanya ingin membuat executable tanpa mengunduh tools, jalankan `Build-Clipper98.bat`. Untuk mengisi folder hasil build sesudahnya, jalankan `Download-Tools.bat`.
+1. Pasang .NET 8 SDK x64.
+2. Jalankan `Release-Clipper98.bat` di PC masing-masing untuk membangun aplikasi, mengunduh tools/model ke PC tersebut, dan membuat folder lokal `Clipper98-v1.0.0`.
+3. Jika hanya ingin membuat executable tanpa mengunduh tools, jalankan `Build-Clipper98.bat`. Untuk mengisi folder hasil build sesudahnya, jalankan `Download-Tools.bat`.
 
 Model `ggml-large-v3-turbo.bin` berukuran sekitar 1,5 GiB. Proses unduh dan unggah ZIP rilis memerlukan koneksi internet yang stabil dan dapat memakan waktu.
 
 ## Jalankan aplikasi
 
-1. Unduh `Clipper98-v1.0.0.zip` dan aset `ggml-large-v3-turbo.bin` dari halaman GitHub Releases.
-2. Ekstrak ZIP ke folder yang dapat ditulis. Salin aset model ke `tools\models\ggml-large-v3-turbo.bin` di folder hasil ekstrak.
-3. Jalankan `Clipper98.exe` dari folder itu. Jangan pisahkan exe dari file lain.
-4. Klik `SETUP` untuk memastikan tools, Python, dan model menunjukkan status tersedia.
-5. Tempel URL YouTube publik. Pilih analisis Gemini API atau impor manifest `.py` dari Gemini CLI/Antigravity.
-6. Pilih kandidat klip, framing, sumber transkrip, bahasa, dan gaya subtitle, lalu tekan `CREATE CLIP`.
+1. Buka folder lokal `Clipper98-v1.0.0` yang dibuat skrip.
+2. Jalankan `Clipper98.exe` dari folder itu. Jangan pisahkan exe dari file lain.
+3. Klik `SETUP` untuk memastikan tools, Python, dan model menunjukkan status tersedia.
+4. Tempel URL YouTube publik. Pilih analisis Gemini API atau impor manifest `.py` dari Gemini CLI/Antigravity.
+5. Pilih kandidat klip, framing, sumber transkrip, bahasa, dan gaya subtitle, lalu tekan `CREATE CLIP`.
 
 ## Analisis kandidat Gemini
 
