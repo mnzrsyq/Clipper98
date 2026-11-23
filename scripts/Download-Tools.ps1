@@ -40,10 +40,20 @@ try {
     Copy-Item -LiteralPath $ffmpeg.FullName -Destination (Join-Path $toolsDir 'ffmpeg.exe') -Force
     Get-Download 'https://raw.githubusercontent.com/FFmpeg/FFmpeg/master/COPYING.GPLv3' (Join-Path $licensesDir 'FFmpeg-GPLv3.txt')
 
-    $whisperTag = 'b5454'
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/$whisperTag" -Headers @{ 'User-Agent' = 'Clipper98-Release' }
-    $asset = $release.assets | Where-Object { $_.name -eq 'whisper-bin-x64.zip' } | Select-Object -First 1
-    if (-not $asset) { throw "Asset whisper-bin-x64.zip tidak ditemukan pada whisper.cpp $whisperTag." }
+    $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/ggml-org/whisper.cpp/releases?per_page=30' -Headers @{ 'User-Agent' = 'Clipper98-Release' }
+    $release = $null
+    $asset = $null
+    foreach ($candidate in $releases) {
+        if ($candidate.draft) { continue }
+        $candidateAsset = $candidate.assets | Where-Object { $_.name -eq 'whisper-bin-x64.zip' } | Select-Object -First 1
+        if ($candidateAsset) {
+            $release = $candidate
+            $asset = $candidateAsset
+            break
+        }
+    }
+    if (-not $release -or -not $asset) { throw 'Rilis whisper.cpp terbaru tidak menyediakan whisper-bin-x64.zip.' }
+    $whisperTag = $release.tag_name
     $whisperZip = Join-Path $tempDir 'whisper.zip'
     Get-Download $asset.browser_download_url $whisperZip
     $whisperExtract = Join-Path $tempDir 'whisper'
@@ -57,7 +67,10 @@ try {
     Get-Download "https://raw.githubusercontent.com/ggml-org/whisper.cpp/$whisperTag/LICENSE" (Join-Path $licensesDir 'whisper.cpp-MIT.txt')
 
     $modelPath = Join-Path $modelsDir 'ggml-large-v3-turbo.bin'
-    Get-Download 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin' $modelPath
+    $modelReady = (Test-Path -LiteralPath $modelPath) -and (Get-Item -LiteralPath $modelPath).Length -ge 1400000000
+    if (-not $modelReady) {
+        Get-Download 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin' $modelPath
+    }
     if ((Get-Item -LiteralPath $modelPath).Length -lt 1400000000) {
         throw 'Ukuran model Large-v3-Turbo tidak sesuai. Periksa unduhan sebelum menjalankan aplikasi.'
     }
@@ -78,7 +91,7 @@ try {
         'OpenCV: haarcascade_frontalface_default.xml'
     ) | Set-Content -LiteralPath (Join-Path $TargetDir 'TOOLS-VERSIONS.txt') -Encoding utf8
 
-    Write-Host "Tools siap di $toolsDir. Model yang diunduh hanya ggml-large-v3-turbo.bin."
+    Write-Host "Tools terbaru siap di $toolsDir. Model yang digunakan hanya ggml-large-v3-turbo.bin."
 }
 finally {
     if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force }

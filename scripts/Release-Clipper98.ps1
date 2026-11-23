@@ -12,20 +12,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $stage 'Clipper98.exe'))) {
     & (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $tag
 }
 
-$required = @(
-    'tools\yt-dlp.exe',
-    'tools\node.exe',
-    'tools\ffmpeg.exe',
-    'tools\whisper-cli.exe',
-    'tools\models\ggml-large-v3-turbo.bin',
-    'tools\models\haarcascade_frontalface_default.xml'
-)
-$missing = $required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $stage $_)) }
-if ($missing) {
-    & (Join-Path $PSScriptRoot 'Download-Tools.ps1') -TargetDir $stage
-} else {
-    Write-Host 'Tools dan model sudah ada di folder lokal; unduhan dilewati.'
-}
+& (Join-Path $PSScriptRoot 'Download-Tools.ps1') -TargetDir $stage
 
 $model = Join-Path $stage 'tools\models\ggml-large-v3-turbo.bin'
 if ((Get-Item -LiteralPath $model).Length -lt 1400000000) {

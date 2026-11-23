@@ -4,11 +4,11 @@ Source build kit for the public Clipper98 Windows application. The development r
 
 ## Local release
 
-Run `Release-Clipper98.bat` on your PC to build the self-contained Windows x64 app, download the required tools and models locally, and create `Clipper98-v1.0.1`. It requires the .NET 8 SDK and an internet connection.
+Run `Release-Clipper98.bat` on your PC to build the self-contained Windows x64 app, download the current tool versions locally, and create `Clipper98-v1.0.1`. It requires the .NET 8 SDK and an internet connection. Running the release script again refreshes the tools; a valid Large-v3-Turbo model already on that PC is reused.
 
 This repository does not store or publish executables, tools, fonts, models, or release archives. Each user downloads tools and the Large-v3-Turbo model to their own PC. The release script prepares only the regular `ggml-large-v3-turbo.bin` model.
 
-To build only the app without downloading tools, run `Build-Clipper98.bat`. Run `Download-Tools.bat` later to fetch the missing components into the local release folder.
+To build only the app without downloading tools, run `Build-Clipper98.bat`. Run `Download-Tools.bat` later to fetch current tool versions into the local release folder. Download archives are temporary and removed after extraction; no tool ZIP is published to GitHub.
 
 ## App workflow
 
