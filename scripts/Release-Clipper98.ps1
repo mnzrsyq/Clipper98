@@ -18,7 +18,20 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue) -and -not $SkipUpload) {
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'Clipper98.exe'))) {
     & (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $tag
 }
-& (Join-Path $PSScriptRoot 'Download-Tools.ps1') -TargetDir $stage
+$required = @(
+    'tools\yt-dlp.exe',
+    'tools\node.exe',
+    'tools\ffmpeg.exe',
+    'tools\whisper-cli.exe',
+    'tools\python\python.exe',
+    'tools\models\ggml-large-v3-turbo.bin'
+)
+$missing = $required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $stage $_)) }
+if ($missing) {
+    & (Join-Path $PSScriptRoot 'Download-Tools.ps1') -TargetDir $stage
+} else {
+    Write-Host 'Paket tools lengkap sudah tersedia; memakai salinan ini.'
+}
 
 Write-Host "Membuat ZIP $folderName ..."
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -CompressionLevel Optimal
