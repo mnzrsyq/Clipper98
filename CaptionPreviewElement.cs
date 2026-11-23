@@ -13,9 +13,9 @@ namespace Clipper98;
 
 public sealed class CaptionPreviewElement : FrameworkElement
 {
-    private static readonly string[] SampleWords = ["KATA", "AKTIF", "KATA", "AKTIF"];
+    private static readonly string[] SampleWords = ["kata", "aktif", "kata", "aktif"];
     private CaptionStyle _style = new();
-    private WpfFontFamily _fontFamily = new("Montserrat");
+    private WpfFontFamily _fontFamily = new("Segoe UI");
 
     public void Update(CaptionStyle style, WpfFontFamily fontFamily)
     {
@@ -31,7 +31,9 @@ public sealed class CaptionPreviewElement : FrameworkElement
 
         const double scale = 480.0 / 1920.0;
         var maxChars = CaptionLayout.CharactersPerLine(_style.FontSize, _style.LetterSpacing);
-        var groups = CaptionLayout.Group(SampleWords, word => word, maxChars, _style.MaxLines);
+        var sampleWords = CaptionTextCase.Transform(string.Join(' ', SampleWords), _style.TextCase)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var groups = CaptionLayout.Group(sampleWords, word => word, maxChars, _style.MaxLines);
         var lines = groups.FirstOrDefault() ?? [["INI"]];
         var weight = _style.FontBold ? FontWeights.Bold : FontWeights.Normal;
         var slant = _style.FontItalic ? FontStyles.Italic : FontStyles.Normal;
@@ -65,7 +67,7 @@ public sealed class CaptionPreviewElement : FrameworkElement
                 var word = words[wordIndex];
                 if (tracking == 0)
                 {
-                    DrawGlyph(word, x, lineCenter, word == "AKTIF" && _style.HighlightEnabled ? highlight : primary,
+                    DrawGlyph(word, x, lineCenter, word.Equals(CaptionTextCase.Transform("aktif", _style.TextCase), StringComparison.OrdinalIgnoreCase) && _style.HighlightEnabled ? highlight : primary,
                         typeface, fontSize, pixelsPerDip, outline, drawingContext);
                     x += wordWidths[wordIndex];
                 }
@@ -74,7 +76,7 @@ public sealed class CaptionPreviewElement : FrameworkElement
                     for (var characterIndex = 0; characterIndex < word.Length; characterIndex++)
                     {
                         var glyph = word[characterIndex].ToString();
-                        DrawGlyph(glyph, x, lineCenter, word == "AKTIF" && _style.HighlightEnabled ? highlight : primary,
+                        DrawGlyph(glyph, x, lineCenter, word.Equals(CaptionTextCase.Transform("aktif", _style.TextCase), StringComparison.OrdinalIgnoreCase) && _style.HighlightEnabled ? highlight : primary,
                             typeface, fontSize, pixelsPerDip, outline, drawingContext);
                         x += Measure(glyph, typeface, fontSize, pixelsPerDip);
                         if (characterIndex + 1 < word.Length) x += tracking;

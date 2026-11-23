@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.0.0'
+    [string]$Version = '1.0.1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,8 +17,8 @@ $required = @(
     'tools\node.exe',
     'tools\ffmpeg.exe',
     'tools\whisper-cli.exe',
-    'tools\python\python.exe',
-    'tools\models\ggml-large-v3-turbo.bin'
+    'tools\models\ggml-large-v3-turbo.bin',
+    'tools\models\haarcascade_frontalface_default.xml'
 )
 $missing = $required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $stage $_)) }
 if ($missing) {

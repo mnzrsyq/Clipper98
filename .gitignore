@@ -7,6 +7,8 @@
 /Clipper98-v*.zip
 /artifacts/
 /tools/
+/fonts/*.ttf
+/models/*.xml
 /clipper_jobs/
 /yt_meta.json
 *.user

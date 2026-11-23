@@ -73,13 +73,19 @@ public static class CaptionWriter
         var maxCharsPerLine = CaptionLayout.CharactersPerLine(style.FontSize, style.LetterSpacing);
         var maxLines = Math.Clamp(style.MaxLines, 1, 4);
         var positionY = Math.Clamp(style.PositionY, 160, 1840);
-        var blocks = new List<CaptionBlock>();
-        foreach (var cue in cues.OrderBy(cue => cue.Start))
-        {
-            var words = cue.Words.Count > 0
+        var cueWords = cues.OrderBy(cue => cue.Start)
+            .Select(cue => cue.Words.Count > 0
                 ? cue.Words.OrderBy(word => word.Start).ThenBy(word => word.End).ToList()
-                : EstimateWordTimings(cue);
-            if (words.Count == 0) continue;
+                : EstimateWordTimings(cue))
+            .Where(words => words.Count > 0)
+            .ToList();
+        var convertedWords = CaptionTextCase.Apply(cueWords.SelectMany(words => words).ToList(), style.TextCase);
+        var blocks = new List<CaptionBlock>();
+        var wordOffset = 0;
+        foreach (var rawWords in cueWords)
+        {
+            var words = convertedWords.Skip(wordOffset).Take(rawWords.Count).ToList();
+            wordOffset += rawWords.Count;
             var groups = CaptionLayout.Group(words, word => word.Text, maxCharsPerLine, maxLines);
             foreach (var lines in groups)
             {
@@ -150,7 +156,7 @@ public static class CaptionWriter
         for (var i = 0; i < line.Count; i++)
         {
             if (i > 0) result.Append(' ');
-            var word = line[i].Text.ToUpperInvariant();
+            var word = line[i].Text;
 
             var escaped = AssEscape(word);
             if (ReferenceEquals(line[i], highlightedWord))

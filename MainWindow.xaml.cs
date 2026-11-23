@@ -17,7 +17,6 @@ public partial class MainWindow : Window
 {
     private static readonly HttpClient PreviewHttpClient = new() { Timeout = TimeSpan.FromSeconds(8) };
     private readonly ClipPipeline _pipeline = new();
-    private readonly GeminiService _gemini = new();
     private CancellationTokenSource? _cts;
     private AppSettings _settings = SettingsStore.Load();
     private ScanResult? _scan;
@@ -33,18 +32,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         FontBox.ItemsSource = SubtitleFonts.LoadOptions();
         FontBox.SelectedItem = FontBox.Items.OfType<SubtitleFontOption>()
-            .FirstOrDefault(option => option.FamilyName.Equals("Montserrat", StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(option => option.FamilyName.Equals("Segoe UI", StringComparison.OrdinalIgnoreCase))
+            ?? FontBox.Items.OfType<SubtitleFontOption>().FirstOrDefault();
         SetCombo(FontStyleBox, "bold");
         OutputBox.Text = _settings.OutputFolder;
-        GeminiKeyBox.Password = _settings.GeminiApiKey;
-        SetCombo(GeminiModelBox, _settings.GeminiModel);
         SetCombo(SubtitleSourceBox, _settings.SubtitleSource);
-        if (_settings.WhisperModel is not ("large-v3-turbo" or "large-v3-turbo-q8_0"))
-        {
-            _settings.WhisperModel = "large-v3-turbo";
-            SettingsStore.Save(_settings);
-        }
-        SetCombo(WhisperModelBox, _settings.WhisperModel);
         LoadSavedSubtitlePresets();
         FramePathText.Text = string.IsNullOrWhiteSpace(_settings.FramePngPath) ? "Belum ada frame" : _settings.FramePngPath;
         Loaded += (_, _) =>
@@ -67,111 +59,10 @@ public partial class MainWindow : Window
 
         var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 5;
         CandidateCountBox.Text = requested.ToString();
-        var prompt = $"@clipper Buatkan maksimal {requested} kandidat klip potensi viral dari video ini: {url}. Ikuti format manifest CLIPPER_JOB di skill dan hasilkan file .py data-only di folder clipper_jobs.";
+        var prompt = $"@clipper {url} Buatkan Klip Viral sebanyak {requested} klip.";
         System.Windows.Clipboard.SetText(prompt);
-        SetStatus("STATUS: prompt Gemini CLI disalin. Tempel di CLI dengan skill @clipper aktif.");
-        WriteLog($"Prompt @clipper disalin untuk {requested} kandidat.");
-    }
-
-    private async void GeminiAnalyzeButton_Click(object sender, RoutedEventArgs e)
-    {
-        var url = UrlBox.Text.Trim();
-        if (!IsYouTubeUrl(url))
-        {
-            SetStatus("STATUS: masukkan URL YouTube https yang valid.", true);
-            return;
-        }
-
-        var apiKey = GeminiKeyBox.Password.Trim();
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            SetStatus("STATUS: masukkan Gemini API key di kolom GEMINI KEY.", true);
-            GeminiKeyBox.Focus();
-            return;
-        }
-
-        var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 5;
-        CandidateCountBox.Text = requested.ToString();
-        var model = SelectedText(GeminiModelBox, "gemini-4-hydrogen");
-
-        using var cts = new CancellationTokenSource();
-        _cts = cts;
-        string? generatedPath = null;
-        try
-        {
-            ToggleBusy(true);
-            _settings.GeminiApiKey = apiKey;
-            _settings.GeminiModel = model;
-            SettingsStore.Save(_settings);
-            WorkProgress.Value = 0;
-            WorkProgress.IsIndeterminate = true;
-            SetStatus($"STATUS: menganalisis video dengan {model}...");
-            WriteLog($"Meminta kandidat dari Gemini API ({model}); batas {requested} kandidat.");
-
-            var skillPath = Path.Combine(AppContext.BaseDirectory, "SKILL.md");
-            var generated = await _gemini.AnalyzeVideoAsync(
-                url, requested, model, apiKey, skillPath,
-                message => Dispatcher.BeginInvoke(() =>
-                {
-                    SetStatus("STATUS: " + message);
-                    WriteLog(message);
-                }),
-                cts.Token);
-
-            var script = NormalizeGeneratedScript(generated);
-            var jobsFolder = Path.Combine(AppContext.BaseDirectory, "clipper_jobs");
-            Directory.CreateDirectory(jobsFolder);
-            generatedPath = Path.Combine(jobsFolder, $"clipper_job_api_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..6]}.py");
-            await File.WriteAllTextAsync(generatedPath, script, new System.Text.UTF8Encoding(false), cts.Token);
-
-            var loaded = ClipperJobScript.Load(generatedPath);
-            var requestedVideoId = YouTubeVideoId(url);
-            if (!string.Equals(requestedVideoId, YouTubeVideoId(loaded.Manifest.Source.Url), StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Manifest Gemini merujuk ke video yang berbeda dari URL yang diminta.");
-            if (!string.IsNullOrWhiteSpace(loaded.Manifest.Source.VideoId)
-                && !string.Equals(requestedVideoId, loaded.Manifest.Source.VideoId, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("ID video di manifest Gemini tidak cocok dengan URL yang diminta.");
-            if (loaded.Clips.Count > requested || loaded.Manifest.RequestedCandidateCount > requested)
-                throw new InvalidOperationException($"Gemini mengembalikan lebih dari {requested} kandidat yang diminta.");
-            _manifest = loaded.Manifest;
-            _manifestPath = generatedPath;
-            _clips.Clear();
-            _clips.AddRange(loaded.Clips);
-            UrlBox.Text = loaded.Manifest.Source.Url;
-            CandidateCountBox.Text = loaded.Manifest.RequestedCandidateCount.ToString();
-            _scan = new ScanResult
-            {
-                Title = string.IsNullOrWhiteSpace(loaded.Manifest.Source.Title) ? "Video YouTube" : loaded.Manifest.Source.Title,
-                Duration = loaded.Manifest.Source.DurationSeconds ?? 0,
-                TranscriptSource = "Gemini API (" + model + ")"
-            };
-            ClipList.ItemsSource = null;
-            ClipList.ItemsSource = _clips;
-            if (_clips.Count > 0) ClipList.SelectedIndex = 0;
-            WorkProgress.IsIndeterminate = false;
-            WorkProgress.Value = 100;
-            SetStatus($"STATUS: {_clips.Count} kandidat Gemini dimuat dan timestamp lolos validasi.");
-            ClipDetail.Text = $"File: {Path.GetFileName(generatedPath)}\nJudul: {_scan.Title}\nKandidat dari Gemini API. Timestamp dapat diedit sebelum render.";
-            WriteLog($"Manifest Gemini API dimuat dan divalidasi: {generatedPath}");
-        }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
-        {
-            SetStatus("STATUS: analisis Gemini dibatalkan.", true);
-            WriteLog("Analisis Gemini dibatalkan.");
-        }
-        catch (Exception ex)
-        {
-            SetStatus("STATUS: analisis Gemini gagal.", true);
-            WriteLog("ERROR Gemini: " + ex.Message);
-            if (!string.IsNullOrWhiteSpace(generatedPath)) WriteLog("Output mentah disimpan untuk diperiksa: " + generatedPath);
-            WpfMessageBox.Show(ex.Message, "Gemini API", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        finally
-        {
-            _cts = null;
-            WorkProgress.IsIndeterminate = false;
-            ToggleBusy(false);
-        }
+        SetStatus("STATUS: prompt tersalin. Tempel di Gemini CLI dengan skill @clipper aktif.");
+        WriteLog($"Prompt @clipper disalin untuk {requested} klip.");
     }
 
     private void ImportScriptButton_Click(object sender, RoutedEventArgs e)
@@ -261,7 +152,7 @@ public partial class MainWindow : Window
                     : $"STATUS: klip {index + 1}/{selected.Count} — {clip.Name}; perkiraan sisa batch {TimeSpan.FromSeconds((DateTime.Now - batchStarted).TotalSeconds / index * (selected.Count - index)):mm\\:ss}.");
                 WorkProgress.IsIndeterminate = true;
                 var progress = new Progress<JobProgress>(p => OnRenderProgress(p, index, selected.Count));
-                var file = await RenderViaPythonAsync(url, scan, clip, ReadStyle(), outputFolder, language, subtitleSource, framePath, progress, cts.Token);
+                var file = await RenderViaCliAsync(url, scan, clip, ReadStyle(), outputFolder, language, subtitleSource, framePath, progress, cts.Token);
                 WorkProgress.IsIndeterminate = false;
                 WorkProgress.Value = (index + 1) * 100.0 / selected.Count;
                 WriteLog("Selesai: " + file);
@@ -316,20 +207,17 @@ public partial class MainWindow : Window
         WorkProgress.IsIndeterminate = true;
     }
 
-    private async Task<string> RenderViaPythonAsync(
+    private async Task<string> RenderViaCliAsync(
         string url, ScanResult scan, ClipCandidate clip, CaptionStyle style, string outputFolder,
         string language, string subtitleSource, string framePath, IProgress<JobProgress> progress, CancellationToken ct)
     {
-        var python = FindPythonCommand()
-            ?? throw new InvalidOperationException("Python 3 belum ditemukan di PATH. Pasang Python 3 untuk menjalankan clipper_runner.py.");
-        var runner = Path.Combine(AppContext.BaseDirectory, "clipper_runner.py");
         var engine = Path.Combine(AppContext.BaseDirectory, "Clipper98.exe");
-        if (!File.Exists(runner) || !File.Exists(engine))
-            throw new InvalidOperationException("clipper_runner.py atau Clipper98.exe tidak ditemukan di folder aplikasi.");
+        if (!File.Exists(engine))
+            throw new InvalidOperationException("Clipper98.exe tidak ditemukan di folder aplikasi.");
 
         var jobRoot = Path.Combine(Path.GetTempPath(), "Clipper98", "cli-jobs", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(jobRoot);
-        var activeLock = TempCacheService.AcquireActiveLock(jobRoot);
+        using var activeLock = TempCacheService.AcquireActiveLock(jobRoot);
         var jobPath = Path.Combine(jobRoot, "render-job.json");
         var progressPath = Path.Combine(jobRoot, "progress.jsonl");
         var request = new RenderJobRequest
@@ -351,52 +239,64 @@ public partial class MainWindow : Window
             OutputFolder = outputFolder,
             Language = language,
             SubtitleSource = subtitleSource,
-            WhisperModel = _settings.WhisperModel,
             FramePngPath = framePath,
             PreserveFullFrame = clip.PreserveFullFrame,
             ProgressFile = progressPath
         };
-        var args = new List<string>();
-        if (Path.GetFileNameWithoutExtension(python).Equals("py", StringComparison.OrdinalIgnoreCase)) args.Add("-3");
-        args.AddRange([runner, "--engine", engine, "--job", jobPath]);
+        var lineIndex = 0;
         string? outputPath = null;
+        string? errorMessage = null;
         try
         {
             await File.WriteAllTextAsync(jobPath, System.Text.Json.JsonSerializer.Serialize(request), ct);
-            var result = await ProcessRunner.RunAsync(
-                python, args, jobRoot,
-                line =>
-                {
-                    try
-                    {
-                        var update = System.Text.Json.JsonSerializer.Deserialize<JobProgress>(
-                            line, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        if (update is null) { Dispatcher.BeginInvoke(() => WriteLog("CLI: " + line)); return; }
-                        if (update.Kind == ProgressKind.Stage && update.Message.StartsWith("OUTPUT:", StringComparison.Ordinal))
-                        {
-                            outputPath = update.Message[7..];
-                            return;
-                        }
-                        progress.Report(update);
-                    }
-                    catch (System.Text.Json.JsonException)
-                    {
-                        if (!string.IsNullOrWhiteSpace(line)) Dispatcher.BeginInvoke(() => WriteLog("CLI: " + line));
-                    }
-                }, ct);
+            var processTask = ProcessRunner.RunAsync(engine, ["--render-cli", jobPath], jobRoot, cancellationToken: ct);
+            while (!processTask.IsCompleted)
+            {
+                ReadProgressLines();
+                await Task.Delay(250, ct);
+            }
+            var result = await processTask;
+            ReadProgressLines();
             if (result.ExitCode != 0)
-                throw new InvalidOperationException("Runner Python gagal. " + result.Tail());
+                throw new InvalidOperationException(errorMessage ?? result.Tail() ?? "Proses render gagal.");
             if (string.IsNullOrWhiteSpace(outputPath) || !File.Exists(outputPath))
-                throw new InvalidOperationException("Runner selesai tetapi file output tidak ditemukan.");
+                throw new InvalidOperationException("Render selesai tetapi file output tidak ditemukan.");
             return outputPath;
         }
         finally
         {
-            activeLock.Dispose();
             try { if (Directory.Exists(jobRoot)) Directory.Delete(jobRoot, true); } catch { }
         }
-    }
 
+        void ReadProgressLines()
+        {
+            string[] lines;
+            try { lines = File.Exists(progressPath) ? File.ReadAllLines(progressPath) : []; }
+            catch (IOException) { return; }
+            while (lineIndex < lines.Length)
+            {
+                var line = lines[lineIndex++];
+                try
+                {
+                    var update = System.Text.Json.JsonSerializer.Deserialize<JobProgress>(
+                        line, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (update is null) continue;
+                    if (update.Kind == ProgressKind.Stage && update.Message.StartsWith("OUTPUT:", StringComparison.Ordinal))
+                    {
+                        outputPath = update.Message[7..];
+                        continue;
+                    }
+                    if (update.Kind == ProgressKind.Stage && update.Message.StartsWith("ERROR:", StringComparison.Ordinal))
+                    {
+                        errorMessage = update.Message[6..].Trim();
+                        continue;
+                    }
+                    progress.Report(update);
+                }
+                catch (System.Text.Json.JsonException) { }
+            }
+        }
+    }
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         if (_cts is null) return;
@@ -409,7 +309,7 @@ public partial class MainWindow : Window
         if (ClipList.SelectedItem is not ClipCandidate clip)
         {
             RenderButton.IsEnabled = false;
-            PreserveFullFrameBox.IsEnabled = false;
+            SmartCropBox.IsEnabled = false;
             UpdatePreview();
             return;
         }
@@ -418,16 +318,16 @@ public partial class MainWindow : Window
         EndTimeBox.Text = TimeSpan.FromSeconds(clip.End).ToString(@"hh\:mm\:ss");
         RenderButton.IsEnabled = _scan is not null;
         _updatingClipControls = true;
-        PreserveFullFrameBox.IsEnabled = true;
-        PreserveFullFrameBox.IsChecked = clip.PreserveFullFrame;
+        SmartCropBox.IsEnabled = true;
+        SmartCropBox.IsChecked = !clip.PreserveFullFrame;
         _updatingClipControls = false;
         UpdatePreview();
     }
 
-    private void PreserveFullFrame_Changed(object sender, RoutedEventArgs e)
+    private void SmartCrop_Changed(object sender, RoutedEventArgs e)
     {
         if (!_windowReady || _updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
-        clip.PreserveFullFrame = PreserveFullFrameBox.IsChecked == true;
+        clip.PreserveFullFrame = SmartCropBox.IsChecked != true;
         WriteLog(clip.PreserveFullFrame
             ? $"{clip.Name}: mempertahankan seluruh frame; objek/slide tetap terlihat."
             : $"{clip.Name}: smart crop mengikuti wajah utama.");
@@ -487,30 +387,26 @@ public partial class MainWindow : Window
 
     private void SetupButton_Click(object sender, RoutedEventArgs e)
     {
-        var tools = Path.Combine(AppContext.BaseDirectory, "tools");
-        var models = Path.Combine(tools, "models");
+        var models = Path.Combine(AppContext.BaseDirectory, "tools", "models");
         var checks = new[]
         {
-            ("Python 3 (local/PATH)", FindPythonCommand() is not null),
-            ("Gemini API key tersimpan", !string.IsNullOrWhiteSpace(_settings.GeminiApiKey)),
-            ("SKILL.md untuk analisis", File.Exists(Path.Combine(AppContext.BaseDirectory, "SKILL.md"))),
-            ("clipper_runner.py", File.Exists(Path.Combine(AppContext.BaseDirectory, "clipper_runner.py"))),
-            ("yt-dlp.exe", File.Exists(Path.Combine(tools, "yt-dlp.exe"))),
-            ("ffmpeg.exe", File.Exists(Path.Combine(tools, "ffmpeg.exe"))),
-            ("Font Montserrat/Poppins", File.Exists(Path.Combine(tools, "fonts", "Montserrat[wght].ttf")) && File.Exists(Path.Combine(tools, "fonts", "Poppins-ExtraBold.ttf"))),
-            ("whisper-cli.exe", File.Exists(Path.Combine(tools, "whisper-cli.exe"))),
+            ("yt-dlp.exe", ProcessRunner.FindTool("yt-dlp") is not null),
+            ("Node.js untuk YouTube", ProcessRunner.FindTool("node") is not null || ProcessRunner.FindCommand("node") is not null),
+            ("ffmpeg.exe", ProcessRunner.FindTool("ffmpeg") is not null),
+            ("whisper-cli.exe", ProcessRunner.FindTool("whisper-cli") is not null),
             ("Whisper Large-v3-Turbo", File.Exists(Path.Combine(models, "ggml-large-v3-turbo.bin"))),
-            ("Whisper Large-v3-Turbo Q8_0", File.Exists(Path.Combine(models, "ggml-large-v3-turbo-q8_0.bin"))),
             ("Model face detection", File.Exists(Path.Combine(models, "haarcascade_frontalface_default.xml"))),
             ("OpenCV native runtime", File.Exists(Path.Combine(AppContext.BaseDirectory, "OpenCvSharpExtern.dll")) || File.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "OpenCvSharpExtern.dll"))),
             ("Frame PNG", string.IsNullOrWhiteSpace(_settings.FramePngPath) || File.Exists(_settings.FramePngPath))
         };
         var report = string.Join(Environment.NewLine, checks.Select(item => $"{item.Item1}: {(item.Item2 ? "OK" : "belum ada")}"));
-        var geminiCli = ProcessRunner.FindCommand("gemini") is not null || ProcessRunner.FindCommand("agy") is not null;
-        report += $"\n\nGemini API memakai aturan @clipper dari SKILL.md; API key disimpan terenkripsi. Gemini CLI/Antigravity CLI: {(geminiCli ? "OK (opsional)" : "tidak ditemukan (opsional)")}. Model Whisper dipilih di panel subtitle; otomatis dipakai saat diminta atau subtitle YouTube tidak tersedia.";
-        new SetupWindow(report) { Owner = this }.ShowDialog();
+        var downloadable = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "yt-dlp.exe", "Node.js untuk YouTube", "ffmpeg.exe", "whisper-cli.exe", "Whisper Large-v3-Turbo", "Model face detection"
+        };
+        var missing = checks.Where(item => !item.Item2 && downloadable.Contains(item.Item1)).Select(item => item.Item1).ToList();
+        new SetupWindow(report, missing) { Owner = this }.ShowDialog();
     }
-
     private async void UrlBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(UrlBox.Text) || !IsYouTubeUrl(UrlBox.Text.Trim()))
@@ -523,7 +419,7 @@ public partial class MainWindow : Window
             UpdatePreview();
             return;
         }
-        SetStatus("STATUS: URL siap. Pilih Analisis Gemini atau gunakan prompt/manifest CLI.");
+        SetStatus("STATUS: URL siap. Salin prompt untuk Gemini atau impor manifest .py.");
         var id = YouTubeVideoId(UrlBox.Text.Trim());
         if (id.Length > 0) await LoadYouTubeThumbnailAsync(id);
     }
@@ -567,14 +463,6 @@ public partial class MainWindow : Window
         WriteLog(_settings.SubtitleSource == "whisper"
             ? "Transkrip disetel ke Whisper (transkrip ulang lokal)."
             : "Transkrip disetel ke subtitle YouTube otomatis, dengan Whisper sebagai cadangan.");
-    }
-
-    private void WhisperModelBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_windowReady) return;
-        _settings.WhisperModel = SelectedText(WhisperModelBox, "large-v3-turbo");
-        SettingsStore.Save(_settings);
-        WriteLog("Model transkrip disetel ke " + WhisperDisplayName(_settings.WhisperModel) + ".");
     }
 
     private void FrameUploadButton_Click(object sender, RoutedEventArgs e)
@@ -699,11 +587,11 @@ public partial class MainWindow : Window
         else switch (PresetBox.SelectedIndex)
         {
             case 1:
-                SetFontFamily("Poppins"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 80; OutlineSlider.Value = 3; HighlightBox.IsChecked = false; break;
+                SetFontFamily("Segoe UI"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 80; OutlineSlider.Value = 3; HighlightBox.IsChecked = false; break;
             case 2:
-                SetFontFamily("Montserrat"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 120; OutlineSlider.Value = 6; HighlightBox.IsChecked = true; SetCombo(HighlightColorBox, "Yellow"); break;
+                SetFontFamily("Segoe UI"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 120; OutlineSlider.Value = 6; HighlightBox.IsChecked = true; SetCombo(HighlightColorBox, "Yellow"); break;
             default:
-                SetFontFamily("Montserrat"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 100; OutlineSlider.Value = 5; HighlightBox.IsChecked = true; SetCombo(HighlightColorBox, "Yellow"); break;
+                SetFontFamily("Segoe UI"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 100; OutlineSlider.Value = 5; HighlightBox.IsChecked = true; SetCombo(HighlightColorBox, "Yellow"); break;
         }
         UpdatePresetDeleteButton();
         UpdatePreview();
@@ -794,6 +682,7 @@ public partial class MainWindow : Window
         LineSpacingSlider.Value = Math.Clamp(style.LineSpacing, (int)LineSpacingSlider.Minimum, (int)LineSpacingSlider.Maximum);
         HighlightBox.IsChecked = style.HighlightEnabled;
         SetCombo(MaxLinesBox, style.MaxLines.ToString());
+        SetCombo(TextCaseBox, style.TextCase);
         PositionYSlider.Value = Math.Clamp(style.PositionY, (int)PositionYSlider.Minimum, (int)PositionYSlider.Maximum);
     }
 
@@ -811,14 +700,8 @@ public partial class MainWindow : Window
         Outline = style.Outline,
         HighlightEnabled = style.HighlightEnabled,
         PositionY = style.PositionY,
-        MaxLines = style.MaxLines
-    };
-
-    private static string WhisperDisplayName(string model) => model switch
-    {
-        "large-v3-turbo" => "Large-v3-Turbo reguler",
-        "large-v3-turbo-q8_0" => "Large-v3-Turbo Q8_0",
-        _ => "Large-v3-Turbo reguler"
+        MaxLines = style.MaxLines,
+        TextCase = style.TextCase
     };
 
     private void StyleControl_Changed(object sender, RoutedEventArgs e) => UpdatePreview();
@@ -826,7 +709,7 @@ public partial class MainWindow : Window
 
     private CaptionStyle ReadStyle() => new()
     {
-        FontName = (FontBox?.SelectedItem as SubtitleFontOption)?.FamilyName ?? "Montserrat",
+        FontName = (FontBox?.SelectedItem as SubtitleFontOption)?.FamilyName ?? "Segoe UI",
         FontFilePath = (FontBox?.SelectedItem as SubtitleFontOption)?.FilePath ?? string.Empty,
         FontBold = SelectedText(FontStyleBox, "bold") is "bold" or "bold-italic",
         FontItalic = SelectedText(FontStyleBox, "regular") is "italic" or "bold-italic",
@@ -838,7 +721,8 @@ public partial class MainWindow : Window
         HighlightEnabled = HighlightBox?.IsChecked == true,
         Outline = (int)(OutlineSlider?.Value ?? 4),
         PositionY = (int)(PositionYSlider?.Value ?? 1420),
-        MaxLines = int.TryParse(SelectedText(MaxLinesBox, "2"), out var lines) ? lines : 2
+        MaxLines = int.TryParse(SelectedText(MaxLinesBox, "2"), out var lines) ? lines : 2,
+        TextCase = SelectedText(TextCaseBox, "sentence")
     };
 
     private void UpdatePreview()
@@ -887,22 +771,6 @@ public partial class MainWindow : Window
             string.Equals(item.Tag?.ToString(), value, StringComparison.Ordinal)
             || string.Equals(item.Content?.ToString(), value, StringComparison.Ordinal));
 
-    private static string NormalizeGeneratedScript(string generated)
-    {
-        var script = generated.Trim().TrimStart('\uFEFF');
-        var fence = script.IndexOf("```");
-        if (fence >= 0)
-        {
-            var firstLine = script.IndexOf('\n', fence);
-            var closingFence = script.LastIndexOf("```");
-            if (firstLine >= 0 && closingFence > firstLine)
-                script = script[(firstLine + 1)..closingFence].Trim();
-        }
-        var assignment = script.IndexOf("CLIPPER_JOB", StringComparison.Ordinal);
-        if (assignment >= 0) script = script[assignment..];
-        return script.Trim() + Environment.NewLine;
-    }
-
     private static bool IsYouTubeUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && uri.Scheme == Uri.UriSchemeHttps
@@ -925,15 +793,11 @@ public partial class MainWindow : Window
 
     private void ToggleBusy(bool busy)
     {
-        GeminiAnalyzeButton.IsEnabled = !busy;
-        GeminiKeyBox.IsEnabled = !busy;
-        GeminiModelBox.IsEnabled = !busy;
         UrlBox.IsEnabled = !busy;
         ImportScriptButton.IsEnabled = !busy;
         CopyPromptButton.IsEnabled = !busy;
         SubtitleSourceBox.IsEnabled = !busy;
         LanguageBox.IsEnabled = !busy;
-        WhisperModelBox.IsEnabled = !busy;
         FrameUploadButton.IsEnabled = !busy;
         FrameRemoveButton.IsEnabled = !busy;
         PresetBox.IsEnabled = !busy;
@@ -942,6 +806,7 @@ public partial class MainWindow : Window
         UpdatePresetDeleteButton();
         FontBox.IsEnabled = !busy;
         FontStyleBox.IsEnabled = !busy;
+        TextCaseBox.IsEnabled = !busy;
         ImportFontButton.IsEnabled = !busy;
         FontSizeSlider.IsEnabled = !busy;
         TextColorBox.IsEnabled = !busy;
@@ -952,7 +817,7 @@ public partial class MainWindow : Window
         HighlightBox.IsEnabled = !busy;
         MaxLinesBox.IsEnabled = !busy;
         PositionYSlider.IsEnabled = !busy;
-        PreserveFullFrameBox.IsEnabled = !busy && ClipList.SelectedItem is not null;
+        SmartCropBox.IsEnabled = !busy && ClipList.SelectedItem is not null;
         RenderButton.IsEnabled = !busy && ClipList.SelectedItem is not null;
         CancelButton.IsEnabled = busy;
         SetupButton.IsEnabled = !busy;
@@ -974,19 +839,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string? FindPythonCommand()
-    {
-        var bundled = Path.Combine(AppContext.BaseDirectory, "tools", "python", "python.exe");
-        if (File.Exists(bundled)) return bundled;
-        foreach (var command in new[] { ProcessRunner.FindCommand("python"), ProcessRunner.FindCommand("py") })
-        {
-            if (command is null || !File.Exists(command)) continue;
-            var info = new FileInfo(command);
-            var isStoreStub = command.Contains("\\WindowsApps\\", StringComparison.OrdinalIgnoreCase) && info.Length < 4096;
-            if (!isStoreStub) return command;
-        }
-        return null;
-    }
     private void SetStatus(string message, bool error = false)
     {
         StatusText.Text = message;

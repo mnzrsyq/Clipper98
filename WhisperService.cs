@@ -4,21 +4,16 @@ namespace Clipper98;
 public sealed class WhisperService
 {
     public async Task<List<SubtitleCue>> TranscribeAsync(
-        string mediaFile, string language, string modelChoice, string workDir, CancellationToken ct)
+        string mediaFile, string language, string workDir, CancellationToken ct)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
         var whisper = ProcessRunner.FindTool("whisper-cli")
             ?? throw new InvalidOperationException("whisper-cli.exe belum ditemukan di folder tools.");
         var modelsFolder = Path.Combine(AppContext.BaseDirectory, "tools", "models");
-        var modelFile = modelChoice switch
-        {
-            "large-v3-turbo" => "ggml-large-v3-turbo.bin",
-            "large-v3-turbo-q8_0" => "ggml-large-v3-turbo-q8_0.bin",
-            _ => throw new InvalidOperationException("Pilihan model Whisper tidak dikenal. Pilih Large-v3-Turbo atau Large-v3-Turbo Q8_0 di aplikasi.")
-        };
+        const string modelFile = "ggml-large-v3-turbo.bin";
         var model = Path.Combine(modelsFolder, modelFile);
         if (!File.Exists(model))
-            throw new InvalidOperationException($"Model Whisper belum ditemukan: tools\\models\\{modelFile}. Pilih model yang tersedia atau pasang file model tersebut.");
+            throw new InvalidOperationException($"Model Whisper belum ditemukan: tools\\models\\{modelFile}. Buka SETUP lalu unduh komponen yang kurang.");
 
         // Pastikan hasil unduhan punya jalur audio sebelum diekstrak.
         var probe = await ProcessRunner.RunAsync(ffmpeg, ["-hide_banner", "-i", mediaFile], workDir, null, ct);

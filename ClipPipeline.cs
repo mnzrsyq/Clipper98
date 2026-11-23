@@ -13,7 +13,7 @@ public sealed class ClipPipeline
 
     public async Task<string> RenderAsync(
         string url, ScanResult scan, ClipCandidate clip, CaptionStyle style,
-        string outputFolder, string language, string subtitleSource, string whisperModel, string framePngPath,
+        string outputFolder, string language, string subtitleSource, string framePngPath,
         IProgress<JobProgress> progress, CancellationToken ct)
     {
         Directory.CreateDirectory(outputFolder);
@@ -50,6 +50,7 @@ public sealed class ClipPipeline
 
         var cues = new List<SubtitleCue>();
         string? subtitleProblem = null;
+        const string whisperModel = "large-v3-turbo";
         var transcriptCache = _cache.GetTranscriptPath(url, clip.Start, clip.End, subtitleSource, language, whisperModel);
         var hasTranscriptCache = _cache.TryGetTranscript(transcriptCache, out cues);
         if (hasTranscriptCache)
@@ -88,10 +89,10 @@ public sealed class ClipPipeline
         if (cues.Count == 0)
         {
             var message = subtitleSource.Equals("whisper", StringComparison.OrdinalIgnoreCase)
-                ? $"Memakai Whisper {WhisperDisplayName(whisperModel)} untuk transkrip lokal..."
-                : $"{subtitleProblem ?? "Subtitle YouTube tidak tersedia."} Melanjutkan dengan Whisper {WhisperDisplayName(whisperModel)}...";
+                ? "Memakai Whisper Large-v3-Turbo untuk transkrip lokal..."
+                : $"{subtitleProblem ?? "Subtitle YouTube tidak tersedia."} Melanjutkan dengan Whisper Large-v3-Turbo...";
             progress.Report(JobProgress.Stage(message));
-            cues = await _whisper.TranscribeAsync(source, language, whisperModel, job, ct);
+            cues = await _whisper.TranscribeAsync(source, language, job, ct);
         }
 
         if (!hasTranscriptCache)
@@ -138,13 +139,6 @@ public sealed class ClipPipeline
         TryDeleteFolder(job); // hanya folder kerja milik job ini, hanya bila sukses
         return output;
     }
-
-    private static string WhisperDisplayName(string model) => model switch
-    {
-        "large-v3-turbo" => "Large-v3-Turbo reguler",
-        "large-v3-turbo-q8_0" => "Large-v3-Turbo Q8_0",
-        _ => "Large-v3-Turbo reguler"
-    };
 
     /// <summary>Nama unik per video + klip + rentang waktu, supaya scan video lain tidak menimpa hasil sebelumnya.</summary>
     private static string BuildFileName(string title, ClipCandidate clip)

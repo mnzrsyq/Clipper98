@@ -28,25 +28,13 @@
           <ColumnDefinition Width="150" />
         </Grid.ColumnDefinitions>
         <Grid Grid.Column="0" Margin="0,0,10,0">
-          <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
           <StackPanel>
             <TextBlock Text="SOURCE URL" FontWeight="Bold" Margin="0,0,0,3" />
             <TextBox x:Name="UrlBox" ToolTip="Tempel URL YouTube publik di sini" TextChanged="UrlBox_TextChanged" />
           </StackPanel>
-          <DockPanel Grid.Row="1" Margin="0,6,0,0" LastChildFill="False">
-            <TextBlock Text="GEMINI KEY" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
-            <PasswordBox x:Name="GeminiKeyBox" Width="255" ToolTip="Disimpan terenkripsi di akun Windows ini saat Analisis Gemini ditekan." />
-            <TextBlock Text="MODEL" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,6,0" />
-            <ComboBox x:Name="GeminiModelBox" Width="170" SelectedIndex="0" ToolTip="Pilih model untuk analisis video">
-              <ComboBoxItem Content="gemini-4-hydrogen" />
-              <ComboBoxItem Content="gemini-4-argon" />
-              <ComboBoxItem Content="gemini-3.8-flash" />
-            </ComboBox>
-          </DockPanel>
         </Grid>
         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-          <Button x:Name="GeminiAnalyzeButton" Content="ANALISIS GEMINI" Height="26" Margin="0,1" Padding="3,1" Click="GeminiAnalyzeButton_Click" />
-          <Button x:Name="CopyPromptButton" Content="SALIN PROMPT" Height="26" Margin="0,1" Padding="3,1" Click="CopyPromptButton_Click" />
+          <Button x:Name="CopyPromptButton" Content="CALL SKILL" Height="26" Margin="0,1" Padding="3,1" Click="CopyPromptButton_Click" />
           <Button x:Name="ImportScriptButton" Content="IMPORT .PY" Height="26" Margin="0,1" Padding="3,1" Click="ImportScriptButton_Click" />
         </StackPanel>
       </Grid>
@@ -92,7 +80,7 @@
           </ListBox>
         </GroupBox>
         <StackPanel Grid.Row="2" Margin="0,7,0,0">
-          <TextBlock x:Name="ClipDetail" Text="Impor manifest Gemini atau analisis URL untuk menampilkan kandidat." TextWrapping="Wrap" Foreground="#303030" />
+          <TextBlock x:Name="ClipDetail" Text="Impor manifest hasil @clipper untuk menampilkan kandidat." TextWrapping="Wrap" Foreground="#303030" />
           <DockPanel Margin="0,6,0,0">
             <TextBlock Text="MULAI" VerticalAlignment="Center" Margin="0,0,4,0" />
             <TextBox x:Name="StartTimeBox" Width="70" ToolTip="HH:MM:SS" Text="00:00:00" />
@@ -140,12 +128,6 @@
               <ComboBoxItem Content="Indonesia" Tag="id" />
               <ComboBoxItem Content="English" Tag="en" />
             </ComboBox>
-            <TextBlock Text="MODEL WHISPER" FontWeight="Bold" Margin="0,9,0,3" />
-            <ComboBox x:Name="WhisperModelBox" SelectionChanged="WhisperModelBox_SelectionChanged" SelectedIndex="0" ToolTip="Large-v3-Turbo reguler sekitar 1,5 GiB; Q8_0 lebih kecil sekitar 834 MiB.">
-              <ComboBoxItem Content="Large-v3-Turbo — reguler, 1,5 GiB" Tag="large-v3-turbo" />
-              <ComboBoxItem Content="Large-v3-Turbo Q8_0 — 834 MiB" Tag="large-v3-turbo-q8_0" />
-            </ComboBox>
-
             <Separator Margin="0,12,0,8" />
             <TextBlock Text="PRESET" FontWeight="Bold" Margin="0,0,0,3" />
             <ComboBox x:Name="PresetBox" SelectionChanged="PresetBox_SelectionChanged" SelectedIndex="0">
@@ -170,6 +152,14 @@
               <ComboBoxItem Content="Bold" Tag="bold" />
               <ComboBoxItem Content="Italic" Tag="italic" />
               <ComboBoxItem Content="Bold Italic" Tag="bold-italic" />
+            </ComboBox>
+            <TextBlock Text="KAPITALISASI" FontWeight="Bold" Margin="0,7,0,3" />
+            <ComboBox x:Name="TextCaseBox" SelectionChanged="StyleControl_Changed" SelectedIndex="0">
+              <ComboBoxItem Content="Sentence case." Tag="sentence" />
+              <ComboBoxItem Content="lowercase" Tag="lowercase" />
+              <ComboBoxItem Content="UPPERCASE" Tag="uppercase" />
+              <ComboBoxItem Content="Capitalize Each Word" Tag="title" />
+              <ComboBoxItem Content="tOGGLE cASE" Tag="toggle" />
             </ComboBox>
             <DockPanel Margin="0,9,0,0">
               <TextBlock Text="UKURAN" FontWeight="Bold" VerticalAlignment="Center" />
@@ -210,9 +200,9 @@
             <Slider x:Name="PositionYSlider" Minimum="300" Maximum="1780" Value="1420" TickFrequency="40" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
 
             <Separator Margin="0,11,0,8" />
-            <TextBlock Text="FRAMING KLIP TERPILIH" FontWeight="Bold" Margin="0,0,0,4" />
-            <CheckBox x:Name="PreserveFullFrameBox" Content="Ada objek/slide penting — jaga seluruh frame" Checked="PreserveFullFrame_Changed" Unchecked="PreserveFullFrame_Changed" ToolTip="Kalau dicentang, seluruh video asli terlihat di kanvas 9:16 dengan latar blur. Kalau tidak, wajah utama diikuti smart crop." />
-            <TextBlock Text="Smart crop mengikuti wajah. Jika wajah tak terdeteksi selama 2 detik atau lebih, tampilan sementara beralih ke video utuh dengan latar blur. Centang opsi di atas untuk memakai mode ini sepanjang klip." Foreground="#404040" FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0" />
+            <TextBlock Text="Framing Klip Terpilih" FontWeight="Bold" Margin="0,0,0,4" />
+            <CheckBox x:Name="SmartCropBox" Content="Smart Crop" Checked="SmartCrop_Changed" Unchecked="SmartCrop_Changed" ToolTip="Dicentang: crop mengikuti wajah utama. Tidak dicentang: seluruh frame video terlihat dengan latar blur." />
+            <TextBlock Text="Jika Smart Crop aktif dan wajah tak terdeteksi selama 2 detik atau lebih, tampilan sementara beralih ke video utuh dengan latar blur." Foreground="#404040" FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0" />
             <DockPanel Margin="0,9,0,0">
               <TextBlock Text="FRAME PNG" FontWeight="Bold" VerticalAlignment="Center" />
               <Button x:Name="FrameUploadButton" Content="PILIH" Padding="7,2" Click="FrameUploadButton_Click" />
@@ -248,7 +238,7 @@
 
     <Border Grid.Row="5" Background="#202020" Padding="6,4" Margin="0,4,0,0">
       <StackPanel>
-        <TextBlock x:Name="StatusText" Foreground="#FFFFFF" Text="STATUS: isi URL dan Gemini key, lalu pilih Analisis Gemini atau pakai prompt/manifest CLI." />
+        <TextBlock x:Name="StatusText" Foreground="#FFFFFF" Text="STATUS: isi URL YouTube, lalu salin prompt atau impor manifest .py." />
         <ProgressBar x:Name="WorkProgress" Height="8" Minimum="0" Maximum="100" Value="0" Margin="0,4,0,0" />
       </StackPanel>
     </Border>

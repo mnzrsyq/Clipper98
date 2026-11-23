@@ -55,7 +55,6 @@ public partial class App : System.Windows.Application
                 request.OutputFolder,
                 request.Language,
                 request.SubtitleSource,
-                request.WhisperModel,
                 request.FramePngPath,
                 progress,
                 CancellationToken.None);

@@ -34,10 +34,6 @@ public static class SubtitleFonts
             options.Add(new SubtitleFontOption { DisplayName = name, FamilyName = name });
         }
 
-        var localFonts = Path.Combine(AppContext.BaseDirectory, "tools", "fonts");
-        AddLocalFonts(options, localFonts, imported: false);
-        AddBundledFallback(options, localFonts, "Montserrat", "Montserrat[wght].ttf", bold: false);
-        AddBundledFallback(options, localFonts, "Poppins", "Poppins-ExtraBold.ttf", bold: true);
         AddLocalFonts(options, UserFontsFolder, imported: true);
         return options
             .GroupBy(option => option.DisplayName, StringComparer.CurrentCultureIgnoreCase)
@@ -67,7 +63,7 @@ public static class SubtitleFonts
 
     public static WpfFontFamily ResolvePreviewFamily(SubtitleFontOption? option)
     {
-        if (option is null) return new WpfFontFamily("Montserrat");
+        if (option is null) return new WpfFontFamily("Segoe UI");
         if (!string.IsNullOrWhiteSpace(option.FilePath) && File.Exists(option.FilePath))
         {
             var directory = Path.GetDirectoryName(Path.GetFullPath(option.FilePath));
@@ -110,21 +106,6 @@ public static class SubtitleFonts
                 // Skip files that WPF cannot inspect as a usable font.
             }
         }
-    }
-
-    private static void AddBundledFallback(List<SubtitleFontOption> options, string directory, string family, string fileName, bool bold)
-    {
-        var path = Path.Combine(directory, fileName);
-        if (!File.Exists(path) || options.Any(option =>
-                string.Equals(option.FilePath, path, StringComparison.OrdinalIgnoreCase))) return;
-        options.Add(new SubtitleFontOption
-        {
-            DisplayName = family,
-            FamilyName = family,
-            FaceName = bold ? "ExtraBold" : "Regular",
-            FilePath = path,
-            IsBoldFace = bold
-        });
     }
 
     private static (string Family, string Face, bool Bold, bool Italic) ReadMetadata(string path)

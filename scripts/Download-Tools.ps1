@@ -1,5 +1,5 @@
 param(
-    [string]$TargetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Clipper98-v1.0.0')
+    [string]$TargetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Clipper98-v1.0.1')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,28 +56,26 @@ try {
     }
     Get-Download "https://raw.githubusercontent.com/ggml-org/whisper.cpp/$whisperTag/LICENSE" (Join-Path $licensesDir 'whisper.cpp-MIT.txt')
 
-    $pythonVersion = '3.14.10'
-    $pythonZip = Join-Path $tempDir 'python-embed.zip'
-    Get-Download "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-embed-amd64.zip" $pythonZip
-    $pythonDir = Join-Path $toolsDir 'python'
-    New-Item -ItemType Directory -Path $pythonDir -Force | Out-Null
-    Expand-Archive -LiteralPath $pythonZip -DestinationPath $pythonDir -Force
-    if (-not (Test-Path -LiteralPath (Join-Path $pythonDir 'python.exe'))) { throw 'python.exe tidak ditemukan dalam paket Python portable.' }
-    Copy-Item -LiteralPath (Join-Path $pythonDir 'LICENSE.txt') -Destination (Join-Path $licensesDir 'Python-PSF-LICENSE.txt') -Force
-
     $modelPath = Join-Path $modelsDir 'ggml-large-v3-turbo.bin'
     Get-Download 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin' $modelPath
     if ((Get-Item -LiteralPath $modelPath).Length -lt 1400000000) {
         throw 'Ukuran model Large-v3-Turbo tidak sesuai. Periksa unduhan sebelum menjalankan aplikasi.'
     }
 
+    $faceModel = Join-Path $modelsDir 'haarcascade_frontalface_default.xml'
+    Get-Download 'https://raw.githubusercontent.com/opencv/opencv/4.x/data/haarcascades/haarcascade_frontalface_default.xml' $faceModel
+    if ((Get-Item -LiteralPath $faceModel).Length -lt 500000) {
+        throw 'Ukuran model face detector OpenCV tidak sesuai. Periksa unduhan sebelum menjalankan aplikasi.'
+    }
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'models\LICENSE-OpenCV.txt') -Destination (Join-Path $licensesDir 'OpenCV-LICENSE.txt') -Force
+
     @(
         'yt-dlp: latest official Windows x64 release',
         'FFmpeg: Gyan.dev essentials Windows build',
         "Node.js: v$nodeVersion Windows x64 node.exe",
         "whisper.cpp: $whisperTag CPU Windows x64",
-        "Python embeddable: $pythonVersion x64",
-        'Whisper model: ggml-large-v3-turbo.bin (regular, not Q8_0)'
+        'Whisper model: ggml-large-v3-turbo.bin (regular, not Q8_0)',
+        'OpenCV: haarcascade_frontalface_default.xml'
     ) | Set-Content -LiteralPath (Join-Path $TargetDir 'TOOLS-VERSIONS.txt') -Encoding utf8
 
     Write-Host "Tools siap di $toolsDir. Model yang diunduh hanya ggml-large-v3-turbo.bin."

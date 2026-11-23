@@ -46,6 +46,11 @@ public static class ProcessRunner
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
+        var toolsDirectory = Path.Combine(AppContext.BaseDirectory, "tools");
+        var currentPath = info.Environment["PATH"] ?? string.Empty;
+        if (!currentPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Contains(toolsDirectory, StringComparer.OrdinalIgnoreCase))
+            info.Environment["PATH"] = toolsDirectory + Path.PathSeparator + currentPath;
         // ArgumentList mengurus quoting Windows sendiri, jadi tidak ada lagi Q() manual.
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
 

@@ -77,7 +77,6 @@ public sealed class RenderJobRequest
     [JsonPropertyName("output_folder")] public string OutputFolder { get; set; } = string.Empty;
     [JsonPropertyName("language")] public string Language { get; set; } = "id";
     [JsonPropertyName("subtitle_source")] public string SubtitleSource { get; set; } = "auto";
-    [JsonPropertyName("whisper_model")] public string WhisperModel { get; set; } = "large-v3-turbo";
     [JsonPropertyName("frame_png_path")] public string FramePngPath { get; set; } = string.Empty;
     [JsonPropertyName("preserve_full_frame")] public bool PreserveFullFrame { get; set; }
     [JsonPropertyName("progress_file")] public string ProgressFile { get; set; } = string.Empty;
@@ -85,7 +84,7 @@ public sealed class RenderJobRequest
 
 public sealed class CaptionStyle
 {
-    public string FontName { get; set; } = "Montserrat";
+    public string FontName { get; set; } = "Segoe UI";
     public string FontFilePath { get; set; } = string.Empty;
     public bool FontBold { get; set; } = true;
     public bool FontItalic { get; set; }
@@ -98,15 +97,13 @@ public sealed class CaptionStyle
     public bool HighlightEnabled { get; set; } = true;
     public int PositionY { get; set; } = 1420;
     public int MaxLines { get; set; } = 2;
+    public string TextCase { get; set; } = "sentence";
 }
 
 public sealed class AppSettings
 {
     public string OutputFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Clipper98");
-    public string GeminiApiKey { get; set; } = string.Empty;
-    public string GeminiModel { get; set; } = "gemini-4-hydrogen";
     public string SubtitleSource { get; set; } = "auto";
-    public string WhisperModel { get; set; } = "large-v3-turbo";
     public List<SubtitleStylePreset> SubtitlePresets { get; set; } = [];
     public string FramePngPath { get; set; } = string.Empty;
 }
