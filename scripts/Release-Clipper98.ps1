@@ -10,7 +10,6 @@ $folderName = "Clipper98-$tag"
 $stage = Join-Path $repoRoot $folderName
 $archive = Join-Path $repoRoot "$folderName.zip"
 
-if (Test-Path -LiteralPath $archive) { throw "Arsip sudah ada: $archive. Pindahkan atau hapus manual sebelum membuat ulang." }
 if (-not (Get-Command gh -ErrorAction SilentlyContinue) -and -not $SkipUpload) {
     throw 'GitHub CLI (gh) tidak ditemukan. Pasang gh atau jalankan dengan -SkipUpload untuk hanya menyiapkan folder dan ZIP.'
 }
@@ -34,7 +33,7 @@ if ($missing) {
 }
 
 Write-Host "Membuat ZIP $folderName ..."
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -CompressionLevel Optimal
+Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -CompressionLevel NoCompression -Force
 if (-not (Test-Path -LiteralPath $archive)) { throw 'ZIP rilis tidak berhasil dibuat.' }
 
 if (-not $SkipUpload) {

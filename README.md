@@ -4,7 +4,7 @@ Source build kit and release tools for the public Clipper98 Windows application.
 
 ## Release package
 
-Run `Release-Clipper98.bat` from this folder to build the self-contained Windows x64 app, download its runtime tools, create a `Clipper98-v1.0.0` folder and ZIP, then publish the ZIP as a GitHub release. It requires the .NET 8 SDK, Git, GitHub CLI authenticated to `mnzrsyq`, and an internet connection.
+Run `Release-Clipper98.bat` from this folder to build the self-contained Windows x64 app, download its runtime tools, create a `Clipper98-v1.0.0` folder and a fast, uncompressed ZIP, then publish the ZIP as a GitHub release. It requires the .NET 8 SDK, Git, GitHub CLI authenticated to `mnzrsyq`, and an internet connection.
 
 The release setup downloads yt-dlp, FFmpeg, Node.js for yt-dlp's YouTube JavaScript support, whisper.cpp CPU binaries, portable Python, and only `ggml-large-v3-turbo.bin`. It does not download or include the Q8_0 model. The model is about 1.5 GiB, so setup and release upload can take a while.
 
