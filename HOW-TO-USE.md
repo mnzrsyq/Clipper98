@@ -11,11 +11,12 @@ Model `ggml-large-v3-turbo.bin` berukuran sekitar 1,5 GiB. Proses unduh dan ungg
 
 ## Jalankan aplikasi
 
-1. Ekstrak `Clipper98-v1.0.0.zip` ke folder yang dapat ditulis.
-2. Buka folder hasil ekstrak dan jalankan `Clipper98.exe`. Jangan pisahkan exe dari file lain di folder tersebut.
-3. Klik `SETUP` untuk memastikan tools, Python, dan model menunjukkan status tersedia.
-4. Tempel URL YouTube publik. Pilih analisis Gemini API atau impor manifest `.py` dari Gemini CLI/Antigravity.
-5. Pilih kandidat klip, framing, sumber transkrip, bahasa, dan gaya subtitle, lalu tekan `CREATE CLIP`.
+1. Unduh `Clipper98-v1.0.0.zip` dan aset `ggml-large-v3-turbo.bin` dari halaman GitHub Releases.
+2. Ekstrak ZIP ke folder yang dapat ditulis. Salin aset model ke `tools\models\ggml-large-v3-turbo.bin` di folder hasil ekstrak.
+3. Jalankan `Clipper98.exe` dari folder itu. Jangan pisahkan exe dari file lain.
+4. Klik `SETUP` untuk memastikan tools, Python, dan model menunjukkan status tersedia.
+5. Tempel URL YouTube publik. Pilih analisis Gemini API atau impor manifest `.py` dari Gemini CLI/Antigravity.
+6. Pilih kandidat klip, framing, sumber transkrip, bahasa, dan gaya subtitle, lalu tekan `CREATE CLIP`.
 
 ## Analisis kandidat Gemini
 
