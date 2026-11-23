@@ -1,0 +1,13 @@
+/bin/
+/obj/
+/.vs/
+/.idea/
+/.dotnet-cli/
+/Clipper98-v*/
+/Clipper98-v*.zip
+/artifacts/
+/tools/
+/clipper_jobs/
+/yt_meta.json
+*.user
+*.suo
