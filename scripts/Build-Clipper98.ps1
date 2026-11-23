@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.0.1'
+    [string]$Version = '1.0.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,9 +8,8 @@ $tag = if ($Version.StartsWith('v')) { $Version } else { "v$Version" }
 $folderName = "Clipper98-$tag"
 $output = Join-Path $repoRoot $folderName
 
-if (Test-Path -LiteralPath $output) {
-    throw "Folder output sudah ada: $output. Pindahkan atau hapus folder itu secara manual sebelum build ulang."
-}
+New-Item -ItemType Directory -Path $output -Force | Out-Null
+
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw 'dotnet tidak ditemukan. Pasang .NET 8 SDK x64 terlebih dahulu.'
 }

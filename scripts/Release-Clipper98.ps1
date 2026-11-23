@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.0.1'
+    [string]$Version = '1.0.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,9 +8,7 @@ $tag = if ($Version.StartsWith('v')) { $Version } else { "v$Version" }
 $folderName = "Clipper98-$tag"
 $stage = Join-Path $repoRoot $folderName
 
-if (-not (Test-Path -LiteralPath (Join-Path $stage 'Clipper98.exe'))) {
-    & (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $tag
-}
+& (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $tag
 
 & (Join-Path $PSScriptRoot 'Download-Tools.ps1') -TargetDir $stage
 

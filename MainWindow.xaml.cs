@@ -402,7 +402,7 @@ public partial class MainWindow : Window
         var report = string.Join(Environment.NewLine, checks.Select(item => $"{item.Item1}: {(item.Item2 ? "OK" : "belum ada")}"));
         var downloadable = new HashSet<string>(StringComparer.Ordinal)
         {
-            "yt-dlp.exe", "Node.js untuk YouTube", "ffmpeg.exe", "whisper-cli.exe", "Whisper Large-v3-Turbo", "Model face detection"
+            "yt-dlp.exe", "Node.js untuk YouTube", "ffmpeg.exe", "whisper-cli.exe", "Whisper Large-v3-Turbo"
         };
         var missing = checks.Where(item => !item.Item2 && downloadable.Contains(item.Item1)).Select(item => item.Item1).ToList();
         new SetupWindow(report, missing) { Owner = this }.ShowDialog();

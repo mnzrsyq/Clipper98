@@ -1,21 +1,28 @@
 # Clipper98
 
-Source build kit for the public Clipper98 Windows application. The development repository is `Clipper-Project`; this repository contains the source and scripts needed to build Clipper98 locally.
+Clipper98 adalah aplikasi Windows untuk mengolah kandidat klip YouTube menjadi video vertikal dengan subtitle. Repo ini berisi sumber aplikasi dan skrip build untuk rilis lokal. Repo pengembangan utama: `Clipper-Project`.
 
-## Local release
+## Build rilis lokal
 
-Run `Release-Clipper98.bat` on your PC to build the self-contained Windows x64 app, download the current tool versions locally, and create `Clipper98-v1.0.1`. It requires the .NET 8 SDK and an internet connection. Running the release script again refreshes the tools; a valid Large-v3-Turbo model already on that PC is reused.
+1. Siapkan Windows, .NET 8 SDK x64, dan koneksi internet.
+2. Jalankan `Release-Clipper98.bat`.
+3. Skrip membuat atau memperbarui `Clipper98-v1.0.0` di PC tersebut, membangun ulang aplikasi self-contained, lalu memperbarui tools lokal. Model Whisper Large-v3-Turbo yang sudah valid akan dipakai kembali.
+4. Jalankan `Clipper98.exe` dari folder itu.
 
-This repository does not store or publish executables, tools, fonts, models, or release archives. Each user downloads tools and the Large-v3-Turbo model to their own PC. The release script prepares only the regular `ggml-large-v3-turbo.bin` model.
+Untuk membangun aplikasi tanpa mengunduh tools, jalankan `Build-Clipper98.bat`; setelahnya jalankan `Download-Tools.bat` untuk mengisi folder rilis. Skrip tidak mengunggah executable, tools, model, atau ZIP ke GitHub. Model Whisper yang disiapkan hanya `ggml-large-v3-turbo.bin`.
 
-To build only the app without downloading tools, run `Build-Clipper98.bat`. Run `Download-Tools.bat` later to fetch current tool versions into the local release folder. Download archives are temporary and removed after extraction; no tool ZIP is published to GitHub.
+## Alur aplikasi
 
-## App workflow
+1. Tempel URL YouTube dan pilih jumlah klip.
+2. Klik `CALL SKILL`, lalu jalankan prompt dengan Gemini dan skill `@clipper`.
+3. Impor manifest `.py` dari Gemini. Aplikasi membaca manifest sebagai data dan tidak menjalankan kode Python.
+4. Pilih kandidat, atur framing dan subtitle, lalu buat klip.
 
-- `CALL SKILL` copies a prompt for the `@clipper` skill. The app does not store a Gemini API key or call Gemini API.
-- Import the Gemini `.py` manifest to load clip candidates. Clipper reads it as data and does not execute Python code; Python is not an app dependency.
-- The Setup window checks required components and can download missing tools to the local `tools` folder.
-- Subtitle settings include Windows fonts and five capitalization modes. Whisper Large-v3-Turbo runs when requested or when YouTube subtitles are missing.
-- In `Framing Klip Terpilih`, checked `Smart Crop` follows the main face. Unchecked keeps the entire video visible with a blurred background.
+## Framing dan subtitle
 
-See [HOW-TO-USE.md](HOW-TO-USE.md) for setup and use instructions. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the component license information.
+- `Smart Crop` mengikuti wajah utama. Jika wajah tidak terdeteksi selama dua detik atau lebih, aplikasi menampilkan seluruh frame dengan latar blur.
+- Jika `Smart Crop` tidak dicentang, seluruh frame video tetap terlihat dengan latar blur.
+- Subtitle dapat memakai subtitle YouTube atau transkrip lokal dengan Whisper Large-v3-Turbo.
+- Pilihan font memakai font yang tersedia di Windows. Pengaturan subtitle mencakup kapitalisasi, warna, highlight kata, outline, posisi, dan jumlah baris.
+
+Tools dan model disimpan di PC masing-masing. Lihat [HOW-TO-USE.md](HOW-TO-USE.md) untuk panduan lengkap dan [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) untuk lisensi komponen.

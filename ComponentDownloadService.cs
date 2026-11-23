@@ -57,12 +57,6 @@ public sealed class ComponentDownloadService
                         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true",
                         Path.Combine(ModelsDirectory, ModelName), component, progress, cancellationToken);
                     break;
-                case "Model face detection":
-                    Directory.CreateDirectory(ModelsDirectory);
-                    await DownloadFileAsync(
-                        "https://raw.githubusercontent.com/opencv/opencv/4.x/data/haarcascades/haarcascade_frontalface_default.xml",
-                        Path.Combine(ModelsDirectory, "haarcascade_frontalface_default.xml"), component, progress, cancellationToken);
-                    break;
                 default:
                     throw new InvalidOperationException($"Komponen tidak dikenal: {component}");
             }
@@ -76,7 +70,6 @@ public sealed class ComponentDownloadService
         "ffmpeg.exe" => ProcessRunner.FindTool("ffmpeg") is null,
         "whisper-cli.exe" => ProcessRunner.FindTool("whisper-cli") is null,
         "Whisper Large-v3-Turbo" => !File.Exists(Path.Combine(ModelsDirectory, ModelName)),
-        "Model face detection" => !File.Exists(Path.Combine(ModelsDirectory, "haarcascade_frontalface_default.xml")),
         _ => true
     };
 

@@ -1,5 +1,5 @@
 param(
-    [string]$TargetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Clipper98-v1.0.1')
+    [string]$TargetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Clipper98-v1.0.0')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -87,7 +87,7 @@ try {
         'FFmpeg: Gyan.dev essentials Windows build',
         "Node.js: v$nodeVersion Windows x64 node.exe",
         "whisper.cpp: $whisperTag CPU Windows x64",
-        'Whisper model: ggml-large-v3-turbo.bin (regular, not Q8_0)',
+        'Whisper model: ggml-large-v3-turbo.bin',
         'OpenCV: haarcascade_frontalface_default.xml'
     ) | Set-Content -LiteralPath (Join-Path $TargetDir 'TOOLS-VERSIONS.txt') -Encoding utf8
 

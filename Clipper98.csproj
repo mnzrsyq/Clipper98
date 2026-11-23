@@ -16,6 +16,7 @@
     <Content Include="SKILL.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="README.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="HOW-TO-USE.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="models\haarcascade_frontalface_default.xml" Link="tools\models\haarcascade_frontalface_default.xml" CopyToOutputDirectory="PreserveNewest" Condition="Exists('models\haarcascade_frontalface_default.xml')" />
     <Content Include="models\LICENSE-OpenCV.txt" Link="tools\models\LICENSE-OpenCV.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
