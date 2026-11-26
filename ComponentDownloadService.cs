@@ -10,7 +10,7 @@ public sealed record ComponentDownloadProgress(string Component, long BytesRecei
     public int? Percent => TotalBytes is > 0 ? (int)Math.Clamp(BytesReceived * 100d / TotalBytes.Value, 0, 100) : null;
     public string Detail => TotalBytes is > 0
         ? $"{FormatBytes(BytesReceived)} / {FormatBytes(TotalBytes.Value)} ({Percent}%)"
-        : $"{FormatBytes(BytesReceived)} diterima";
+        : $"{FormatBytes(BytesReceived)} received";
 
     private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024
         ? $"{bytes / 1024d / 1024 / 1024:0.0} GiB"
@@ -42,7 +42,7 @@ public sealed class ComponentDownloadService
                     await DownloadFileAsync("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
                         Path.Combine(ToolsDirectory, "yt-dlp.exe"), component, progress, cancellationToken);
                     break;
-                case "Node.js untuk YouTube":
+                case "Node.js for YouTube":
                     await DownloadFileAsync("https://nodejs.org/download/release/latest-v24.x/win-x64/node.exe",
                         Path.Combine(ToolsDirectory, "node.exe"), component, progress, cancellationToken);
                     break;
@@ -58,14 +58,14 @@ public sealed class ComponentDownloadService
                         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true",
                         Path.Combine(ModelsDirectory, ModelName), component, progress, cancellationToken);
                     break;
-                case "Model face detection":
+                case "Face detection model":
                     Directory.CreateDirectory(ModelsDirectory);
                     await DownloadFileAsync(
                         "https://raw.githubusercontent.com/opencv/opencv/4.x/data/haarcascades/haarcascade_frontalface_default.xml",
                         Path.Combine(ModelsDirectory, FaceModelName), component, progress, cancellationToken);
                     break;
                 default:
-                    throw new InvalidOperationException($"Komponen tidak dikenal: {component}");
+                    throw new InvalidOperationException($"Unknown component: {component}");
             }
         }
     }
@@ -73,11 +73,11 @@ public sealed class ComponentDownloadService
     private static bool IsMissing(string component) => component switch
     {
         "yt-dlp.exe" => ProcessRunner.FindTool("yt-dlp") is null,
-        "Node.js untuk YouTube" => ProcessRunner.FindTool("node") is null && ProcessRunner.FindCommand("node") is null,
+        "Node.js for YouTube" => ProcessRunner.FindTool("node") is null && ProcessRunner.FindCommand("node") is null,
         "ffmpeg.exe" => ProcessRunner.FindTool("ffmpeg") is null,
         "whisper-cli.exe" => ProcessRunner.FindTool("whisper-cli") is null,
         "Whisper Large-v3-Turbo" => !File.Exists(Path.Combine(ModelsDirectory, ModelName)),
-        "Model face detection" => !File.Exists(Path.Combine(ModelsDirectory, FaceModelName)),
+        "Face detection model" => !File.Exists(Path.Combine(ModelsDirectory, FaceModelName)),
         _ => true
     };
 
@@ -92,7 +92,7 @@ public sealed class ComponentDownloadService
             using var zip = ZipFile.OpenRead(archive);
             var entry = zip.Entries.FirstOrDefault(item =>
                 item.FullName.Replace('\\', '/').EndsWith("/bin/ffmpeg.exe", StringComparison.OrdinalIgnoreCase));
-            if (entry is null) throw new InvalidDataException("Arsip FFmpeg tidak berisi bin/ffmpeg.exe.");
+            if (entry is null) throw new InvalidDataException("The FFmpeg archive does not contain bin/ffmpeg.exe.");
             Directory.CreateDirectory(ToolsDirectory);
             await using var input = entry.Open();
             await using var output = new FileStream(Path.Combine(ToolsDirectory, "ffmpeg.exe"), FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
@@ -114,7 +114,7 @@ public sealed class ComponentDownloadService
             var executable = zip.Entries.FirstOrDefault(item =>
                 item.FullName.Replace('\\', '/').EndsWith("/whisper-cli.exe", StringComparison.OrdinalIgnoreCase)
                 || item.FullName.Equals("whisper-cli.exe", StringComparison.OrdinalIgnoreCase));
-            if (executable is null) throw new InvalidDataException("Arsip whisper.cpp tidak berisi whisper-cli.exe.");
+            if (executable is null) throw new InvalidDataException("The whisper.cpp archive does not contain whisper-cli.exe.");
 
             Directory.CreateDirectory(extraction);
             var prefix = executable.FullName.Replace('\\', '/');
@@ -135,7 +135,7 @@ public sealed class ComponentDownloadService
             foreach (var file in Directory.EnumerateFiles(extraction))
                 File.Move(file, Path.Combine(ToolsDirectory, Path.GetFileName(file)), overwrite: true);
             if (!File.Exists(Path.Combine(ToolsDirectory, "whisper-cli.exe")))
-                throw new InvalidDataException("whisper-cli.exe gagal diekstrak.");
+                throw new InvalidDataException("Could not extract whisper-cli.exe.");
         }
         finally
         {
@@ -161,10 +161,10 @@ public sealed class ComponentDownloadService
                 if (asset.TryGetProperty("name", out var name)
                     && name.GetString()?.Equals("whisper-bin-x64.zip", StringComparison.OrdinalIgnoreCase) == true
                     && asset.TryGetProperty("browser_download_url", out var url))
-                    return url.GetString() ?? throw new InvalidDataException("URL arsip whisper.cpp kosong.");
+                    return url.GetString() ?? throw new InvalidDataException("The whisper.cpp archive URL is empty.");
             }
         }
-        throw new InvalidOperationException("Rilis whisper.cpp tidak menyediakan arsip Windows x64.");
+        throw new InvalidOperationException("The whisper.cpp release does not include a Windows x64 archive.");
     }
 
     private static async Task DownloadFileAsync(

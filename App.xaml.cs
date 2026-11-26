@@ -30,9 +30,9 @@ public partial class App : System.Windows.Application
         {
             var json = await File.ReadAllTextAsync(jobFile);
             var request = JsonSerializer.Deserialize<RenderJobRequest>(json)
-                ?? throw new InvalidOperationException("Render job kosong atau tidak valid.");
+                ?? throw new InvalidOperationException("The render job is empty or invalid.");
             if (string.IsNullOrWhiteSpace(request.ProgressFile))
-                throw new InvalidOperationException("Render job tidak memiliki file progress.");
+                throw new InvalidOperationException("The render job has no progress file.");
 
             Directory.CreateDirectory(Path.GetDirectoryName(request.ProgressFile)!);
             File.WriteAllText(request.ProgressFile, string.Empty, Encoding.UTF8);

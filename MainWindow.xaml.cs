@@ -1,10 +1,14 @@
 using System.Diagnostics;
 using System.Net.Http;
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Google.Apis.Upload;
+using Google.Apis.YouTube.v3;
 using WpfOpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using WpfMessageBox = System.Windows.MessageBox;
 using WpfBrushes = System.Windows.Media.Brushes;
@@ -23,15 +27,34 @@ public partial class MainWindow : Window
     private ClipperJobManifest? _manifest;
     private string? _manifestPath;
     private readonly List<ClipCandidate> _clips = [];
+    private readonly ObservableCollection<YouTubeUploadItem> _uploadItems = [];
+    private readonly YouTubeUploadService _youtubeUploader = new();
+    private YouTubeService? _youtubeService;
+    private CancellationTokenSource? _youtubeCts;
     private ClipCandidate? _metadataEditingClip;
+    private YouTubeUploadItem? _selectedUploadItem;
     private CancellationTokenSource? _thumbnailCts;
     private bool _windowReady;
     private bool _updatingClipControls;
     private bool _settingManifestMode;
+    private bool _loadingQueueMetadata;
+    private bool _updatingSelection;
 
     public MainWindow()
     {
+        _settings.YouTubeUploadQueue ??= [];
+        ThemeManager.Apply(_settings.NightMode);
         InitializeComponent();
+        foreach (var item in _settings.YouTubeUploadQueue)
+        {
+            item.PropertyChanged += UploadItem_PropertyChanged;
+            _uploadItems.Add(item);
+        }
+        UploadScheduleGrid.ItemsSource = _uploadItems;
+        RefreshQueueNumbers();
+        PublishDatePicker.SelectedDate = GetWibNow().Date;
+        if (_uploadItems.Count > 0) UploadScheduleGrid.SelectedIndex = 0;
+        UpdateUploadQueueSummary();
         FontBox.ItemsSource = SubtitleFonts.LoadOptions();
         FontBox.SelectedItem = FontBox.Items.OfType<SubtitleFontOption>()
             .FirstOrDefault(option => option.FamilyName.Equals("Segoe UI", StringComparison.OrdinalIgnoreCase))
@@ -51,7 +74,7 @@ public partial class MainWindow : Window
         UpdateTtsVoiceChoices(_settings.TtsVoice);
         ShortClipSubtitleCheckBox.IsChecked = _settings.UseShortClipSubtitles;
         LoadSavedSubtitlePresets();
-        FramePathText.Text = string.IsNullOrWhiteSpace(_settings.FramePngPath) ? "Belum ada frame" : _settings.FramePngPath;
+        FramePathText.Text = string.IsNullOrWhiteSpace(_settings.FramePngPath) ? "No frame selected" : _settings.FramePngPath;
         Loaded += (_, _) =>
         {
             _windowReady = true;
@@ -59,7 +82,7 @@ public partial class MainWindow : Window
             LoadFramePreview();
             UpdatePreview();
         };
-        WriteLog("Clipper 98 siap.");
+        WriteLog("Clipper 98 is ready.");
     }
 
     private void CopyPromptButton_Click(object sender, RoutedEventArgs e)
@@ -67,16 +90,16 @@ public partial class MainWindow : Window
         var url = UrlBox.Text.Trim();
         if (!IsYouTubeUrl(url))
         {
-            SetStatus("STATUS: tempel URL YouTube terlebih dahulu.", true);
+            SetStatus("STATUS: Enter a YouTube URL first.", true);
             return;
         }
 
         var prompt = BuildSkillPrompt(url);
         System.Windows.Clipboard.SetText(prompt);
         SetStatus(IsCondensedMode
-            ? "STATUS: Prompt Ringkas Video tersalin. Pilih skill /clipper-ringkas di Gemini, lalu tempel prompt."
-            : "STATUS: Prompt Klip Pendek tersalin. Pilih skill /clipper di Gemini, lalu tempel prompt.");
-        WriteLog(IsCondensedMode ? "Prompt Ringkas Video disalin untuk Gemini." : "Prompt Klip Pendek disalin untuk Gemini.");
+            ? "STATUS: Condense Video prompt copied. Open Gemini, start a new chat, select the /clipper-ringkas skill, and paste the prompt."
+            : "STATUS: Short Clips prompt copied. Open Gemini, start a new chat, select the /clipper skill, and paste the prompt.");
+        WriteLog(IsCondensedMode ? "Condense Video prompt copied for Gemini." : "Short Clips prompt copied for Gemini.");
     }
 
     private string BuildSkillPrompt(string url)
@@ -111,7 +134,7 @@ public partial class MainWindow : Window
                 _clips.Clear();
                 ClipList.ItemsSource = null;
                 _scan = null;
-                ClipDetail.Text = "Mode berubah. Salin prompt untuk mode ini, lalu impor manifest hasil Gemini.";
+                ClipDetail.Text = "Mode changed. Copy the prompt for this mode, then import the manifest from Gemini.";
                 RenderButton.IsEnabled = false;
             }
         }
@@ -119,7 +142,7 @@ public partial class MainWindow : Window
         ShortClipOptionsPanel.Visibility = condensed ? Visibility.Collapsed : Visibility.Visible;
         CondensedOptionsPanel.Visibility = condensed ? Visibility.Visible : Visibility.Collapsed;
         TimestampEditPanel.Visibility = condensed ? Visibility.Collapsed : Visibility.Visible;
-        ClipListGroupBox.Header = condensed ? "VIDEO RINGKAS" : "KANDIDAT KLIP";
+        ClipListGroupBox.Header = condensed ? "CONDENSED VIDEO" : "CLIP CANDIDATES";
         UpdateModeDependentControls();
         UpdatePreview();
     }
@@ -157,13 +180,13 @@ public partial class MainWindow : Window
         SubtitleSourceBox.IsEnabled = _cts is null && !condensed;
         LanguageBox.IsEnabled = _cts is null && useSubtitles;
         var portraitOutput = condensed && SelectedText(CondensedAspectBox, "source") == "portrait";
-        FramingHeaderText.Text = condensed ? "Framing Video Ringkas" : "Framing Klip Terpilih";
+        FramingHeaderText.Text = condensed ? "CONDENSED VIDEO FRAMING" : "SELECTED CLIP FRAMING";
         SmartCropBox.ToolTip = portraitOutput
-            ? "Dicentang: area utama 4:5 mengikuti wajah. Tidak dicentang: area utama 4:5 tetap di tengah. Output tetap 9:16 dengan latar blur."
-            : "Dicentang: crop 9:16 mengikuti wajah utama. Tidak dicentang: seluruh frame video terlihat dengan latar blur.";
+            ? "On: the main 4:5 area follows the face. Off: the 4:5 area stays centered. Output remains 9:16 with a blurred background."
+            : "On: the 9:16 crop follows the main face. Off: show the full video frame over a blurred background.";
         SmartCropHelpText.Text = portraitOutput
-            ? "Isi video ditampilkan dalam crop 4:5 di tengah kanvas 9:16; ruang atas dan bawah memakai background blur. Jika wajah tidak terdeteksi, seluruh gambar dipasang di area 4:5."
-            : "Jika Smart Crop aktif dan wajah tak terdeteksi selama 2 detik atau lebih, tampilan sementara beralih ke video utuh dengan latar blur.";
+            ? "The video uses a centered 4:5 crop inside the 9:16 canvas, with a blurred background above and below. If no face is detected, the full image fills the 4:5 area."
+            : "If Smart Crop cannot detect a face for at least two seconds, the preview temporarily shows the full video over a blurred background.";
         SmartCropBox.IsEnabled = _cts is null && ClipList.SelectedItem is not null && (!condensed || portraitOutput);
         FrameUploadButton.IsEnabled = _cts is null && !condensed;
         FrameRemoveButton.IsEnabled = _cts is null && !condensed;
@@ -257,8 +280,8 @@ public partial class MainWindow : Window
     {
         var dialog = new WpfOpenFileDialog
         {
-            Title = "Pilih manifest .py dari Gemini",
-            Filter = "Python Clipper job (*.py)|*.py|Semua file (*.*)|*.*",
+            Title = "Select a Clipper manifest from Gemini",
+            Filter = "Clipper Python manifest (*.py)|*.py|All files (*.*)|*.*",
             CheckFileExists = true,
             Multiselect = false
         };
@@ -290,7 +313,7 @@ public partial class MainWindow : Window
             CandidateCountBox.Text = loaded.Manifest.RequestedCandidateCount.ToString();
             _scan = new ScanResult
             {
-                Title = string.IsNullOrWhiteSpace(loaded.Manifest.Source.Title) ? "Video YouTube" : loaded.Manifest.Source.Title,
+                Title = string.IsNullOrWhiteSpace(loaded.Manifest.Source.Title) ? "YouTube video" : loaded.Manifest.Source.Title,
                 Duration = loaded.Manifest.Source.DurationSeconds ?? 0,
                 TranscriptSource = "Gemini"
             };
@@ -299,18 +322,18 @@ public partial class MainWindow : Window
             WorkProgress.IsIndeterminate = false;
             WorkProgress.Value = 100;
             SetStatus(loaded.Manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase)
-                ? $"STATUS: video ringkas dimuat; {_clips[0].KeptSegments.Count} bagian akan disambung."
-                : $"STATUS: {_clips.Count} kandidat dimuat dari Gemini.");
+                ? $"STATUS: condensed video loaded; {_clips[0].KeptSegments.Count} segments will be joined."
+                : $"STATUS: {_clips.Count} candidates loaded from Gemini.");
             ClipDetail.Text = loaded.Manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase)
                 ? BuildCondensedDetail(_clips[0])
-                : $"File: {Path.GetFileName(dialog.FileName)}\nJudul: {_scan.Title}\nTimestamp yang diedit di sini akan disimpan kembali ke manifest.";
-            WriteLog($"Manifest Gemini dimuat: {dialog.FileName}");
+                : $"File: {Path.GetFileName(dialog.FileName)}\nTitle: {_scan.Title}\nTimestamp edits made here will be saved to the manifest.";
+            WriteLog($"Gemini manifest loaded: {dialog.FileName}");
         }
         catch (Exception ex)
         {
-            SetStatus("STATUS: file Gemini tidak bisa dimuat.", true);
+            SetStatus("STATUS: The Gemini manifest could not be loaded.", true);
             WriteLog("ERROR: " + ex.Message);
-            WpfMessageBox.Show(ex.Message, "Import manifest Gemini", MessageBoxButton.OK, MessageBoxImage.Warning);
+            WpfMessageBox.Show(ex.Message, "Import Gemini manifest", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -324,7 +347,7 @@ public partial class MainWindow : Window
     {
         if (_scan is null || !_clips.Any(c => c.IsSelected))
         {
-            SetStatus("STATUS: centang setidaknya satu kandidat sebelum membuat klip.", true);
+            SetStatus("STATUS: Select at least one candidate before creating clips.", true);
             return;
         }
 
@@ -347,14 +370,14 @@ public partial class MainWindow : Window
             var useNarration = isCondensed && CondensedNarrationCheckBox.IsChecked == true;
             if (useNarration && selected.Any(clip => clip.KeptSegments.Count == 0
                     || clip.KeptSegments.Any(segment => string.IsNullOrWhiteSpace(segment.Narration))))
-                throw new InvalidOperationException("Manifest belum memiliki narasi untuk semua potongan. Salin ulang Prompt Gemini dengan opsi narasi aktif, lalu impor manifest terbaru.");
+                throw new InvalidOperationException("The manifest does not include narration for every segment. Copy the Gemini prompt again with narration enabled, then import the updated manifest.");
             var subtitleSource = isCondensed ? "whisper" : SelectedText(SubtitleSourceBox, "auto");
             var preserveSourceAspect = isCondensed && SelectedText(CondensedAspectBox, "source") == "source";
             var useFourByFiveFrame = isCondensed && !preserveSourceAspect;
             var framePath = isCondensed ? string.Empty : _settings.FramePngPath;
             var ttsOptions = ReadTtsOptions();
             if (!string.IsNullOrWhiteSpace(framePath) && !File.Exists(framePath))
-                throw new FileNotFoundException("Frame PNG yang dipilih sudah tidak ditemukan. Pilih ulang frame atau hapus dari panel.", framePath);
+                throw new FileNotFoundException("The selected PNG frame could not be found. Select it again or clear it from the panel.", framePath);
             var outputFolder = OutputBox.Text;
             WorkProgress.IsIndeterminate = false; WorkProgress.Value = 0;
             var batchStarted = DateTime.Now;
@@ -363,29 +386,32 @@ public partial class MainWindow : Window
                 var index = i; // salinan lokal: callback progres berjalan async dan tidak boleh membaca variabel loop
                 var clip = selected[index];
                 SetStatus(index == 0
-                    ? $"STATUS: klip 1/{selected.Count} — {clip.Name}; estimasi batch muncul setelah klip pertama."
-                    : $"STATUS: klip {index + 1}/{selected.Count} — {clip.Name}; perkiraan sisa batch {TimeSpan.FromSeconds((DateTime.Now - batchStarted).TotalSeconds / index * (selected.Count - index)):mm\\:ss}.");
+                    ? $"STATUS: Rendering clip 1/{selected.Count}: {clip.Name}. Batch estimates appear after the first clip."
+                    : $"STATUS: Rendering clip {index + 1}/{selected.Count}: {clip.Name}. Estimated batch time remaining: {TimeSpan.FromSeconds((DateTime.Now - batchStarted).TotalSeconds / index * (selected.Count - index)):mm\\:ss}.");
                 WorkProgress.IsIndeterminate = true;
                 var progress = new Progress<JobProgress>(p => OnRenderProgress(p, index, selected.Count));
                 var file = await RenderViaCliAsync(url, scan, clip, ReadStyle(), outputFolder, language, subtitleSource,
                     framePath, useSubtitles, preserveSourceAspect, useFourByFiveFrame, useNarration, ttsOptions, progress, cts.Token);
                 WorkProgress.IsIndeterminate = false;
                 WorkProgress.Value = (index + 1) * 100.0 / selected.Count;
-                WriteLog("Selesai: " + file);
+                AddRenderedClipToUploadQueue(file, clip);
+                WriteLog("Completed: " + file);
             }
-            SetStatus(isCondensed ? "STATUS: video ringkas selesai dibuat." : $"STATUS: selesai. {selected.Count} klip berhasil dibuat.");
+            SetStatus(isCondensed
+                ? "STATUS: Condensed video created and added to the YouTube queue."
+                : $"STATUS: Created {selected.Count} clips and added them to the YouTube queue.");
             WpfMessageBox.Show(isCondensed
-                ? $"Video ringkas selesai dibuat.\n\n{OutputBox.Text}"
-                : $"{selected.Count} klip selesai dibuat.\n\n{OutputBox.Text}", "Clipper 98", MessageBoxButton.OK, MessageBoxImage.Information);
+                ? $"Condensed video created.\n\n{OutputBox.Text}"
+                : $"Created {selected.Count} clips.\n\n{OutputBox.Text}", "Clipper 98", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            SetStatus("STATUS: render dibatalkan.", true);
-            WriteLog("Render dibatalkan.");
+            SetStatus("STATUS: Rendering canceled.", true);
+            WriteLog("Rendering canceled.");
         }
         catch (Exception ex)
         {
-            SetStatus("STATUS: render gagal.", true);
+            SetStatus("STATUS: Rendering failed.", true);
             WriteLog("ERROR: " + ex.Message);
             WpfMessageBox.Show(ex.Message, "Clipper 98", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -405,7 +431,7 @@ public partial class MainWindow : Window
             if (p.Percent is { } percent) parts.Add($"{percent:0}%");
             if (!string.IsNullOrWhiteSpace(p.Size)) parts.Add(p.Size);
             if (!string.IsNullOrWhiteSpace(p.Speed)) parts.Add(p.Speed);
-            if (!string.IsNullOrWhiteSpace(p.Eta)) parts.Add("sisa " + p.Eta);
+            if (!string.IsNullOrWhiteSpace(p.Eta)) parts.Add("remaining " + p.Eta);
 
             if (p.Percent is { } value)
             {
@@ -414,12 +440,12 @@ public partial class MainWindow : Window
             }
             else
             {
-                WorkProgress.IsIndeterminate = true; // persen tidak diketahui; jangan pura-pura presisi
+                WorkProgress.IsIndeterminate = true; // percentage unavailable; keep the estimate indeterminate
             }
             var transfer = _manifest?.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase) == true
                 ? p.Message
-                : $"unduh klip {index + 1}/{total}";
-            SetStatus($"STATUS: {transfer} — {(parts.Count > 0 ? string.Join(" · ", parts) : "sedang berjalan")}");
+                : $"Downloading clip {index + 1}/{total}";
+            SetStatus($"STATUS: {transfer}: {(parts.Count > 0 ? string.Join(" · ", parts) : "in progress")}");
             return;
         }
 
@@ -436,7 +462,7 @@ public partial class MainWindow : Window
     {
         var engine = Path.Combine(AppContext.BaseDirectory, "Clipper98.exe");
         if (!File.Exists(engine))
-            throw new InvalidOperationException("Clipper98.exe tidak ditemukan di folder aplikasi.");
+            throw new InvalidOperationException("Clipper98.exe was not found in the application folder.");
 
         var jobRoot = Path.Combine(Path.GetTempPath(), "Clipper98", "cli-jobs", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(jobRoot);
@@ -487,9 +513,9 @@ public partial class MainWindow : Window
             var result = await processTask;
             ReadProgressLines();
             if (result.ExitCode != 0)
-                throw new InvalidOperationException(errorMessage ?? result.Tail() ?? "Proses render gagal.");
+                throw new InvalidOperationException(errorMessage ?? result.Tail() ?? "Rendering failed.");
             if (string.IsNullOrWhiteSpace(outputPath) || !File.Exists(outputPath))
-                throw new InvalidOperationException("Render selesai tetapi file output tidak ditemukan.");
+                throw new InvalidOperationException("Rendering finished, but the output file could not be found.");
             return outputPath;
         }
         finally
@@ -561,7 +587,7 @@ public partial class MainWindow : Window
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         if (_cts is null) return;
-        SetStatus("STATUS: membatalkan...");
+        SetStatus("STATUS: Canceling...");
         _cts.Cancel();
     }
 
@@ -580,7 +606,7 @@ public partial class MainWindow : Window
         SetUploadMetadataEditor(clip);
         ClipDetail.Text = clip.KeptSegments.Count > 0
             ? BuildCondensedDetail(clip)
-            : $"{clip.TimeRange}\n{clip.Hook}\n{clip.Reason}" + (string.IsNullOrWhiteSpace(clip.Caption) ? "" : $"\nCaption: {clip.Caption}\n{clip.Hashtags}") + "\nKlip memakai timestamp ini persis.";
+            : $"{clip.TimeRange}\n{clip.Hook}\n{clip.Reason}" + (string.IsNullOrWhiteSpace(clip.Caption) ? "" : $"\nCaption: {clip.Caption}\n{clip.Hashtags}") + "\nThe clip uses these exact timestamps.";
         StartTimeBox.Text = TimeSpan.FromSeconds(clip.Start).ToString(@"hh\:mm\:ss");
         EndTimeBox.Text = TimeSpan.FromSeconds(clip.End).ToString(@"hh\:mm\:ss");
         RenderButton.IsEnabled = _scan is not null;
@@ -595,11 +621,11 @@ public partial class MainWindow : Window
     {
         var keptSeconds = clip.KeptSegments.Sum(segment => segment.DurationSeconds);
         var target = _manifest?.TargetDurationSeconds > 0
-            ? $"\nTarget: sekitar {FormatDuration(_manifest.TargetDurationSeconds)} (perkiraan; alur utuh didahulukan)"
+            ? $"\nTarget: about {FormatDuration(_manifest.TargetDurationSeconds)} (estimated; preserve the complete sequence)"
             : string.Empty;
         var parts = clip.KeptSegments.Select((segment, index) =>
-            $"{index + 1}. {segment.TimeRange} — {segment.Reason}");
-        return $"{clip.KeptSegments.Count} bagian dipertahankan · hasil sekitar {FormatDuration(keptSeconds)}{target}\n\n{string.Join("\n", parts)}";
+            $"{index + 1}. {segment.TimeRange}: {segment.Reason}");
+        return $"{clip.KeptSegments.Count} segments retained · output about {FormatDuration(keptSeconds)}{target}\n\n{string.Join("\n", parts)}";
     }
 
     private static string FormatDuration(double seconds)
@@ -613,39 +639,39 @@ public partial class MainWindow : Window
         if (!_windowReady || _updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
         clip.PreserveFullFrame = SmartCropBox.IsChecked != true;
         WriteLog(clip.PreserveFullFrame
-            ? $"{clip.Name}: mempertahankan seluruh frame; objek/slide tetap terlihat."
-            : $"{clip.Name}: smart crop mengikuti wajah utama.");
+            ? $"{clip.Name}: full frame retained so objects and slides remain visible."
+            : $"{clip.Name}: smart crop follows the main face.");
         UpdatePreview();
     }
 
     private void AddTimestampButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_scan is null) { SetStatus("STATUS: scan video terlebih dahulu.", true); return; }
-        if (_clips.Count >= 20) { SetStatus("STATUS: batas maksimal 20 kandidat sudah tercapai.", true); return; }
+        if (_scan is null) { SetStatus("STATUS: Scan a video first.", true); return; }
+        if (_clips.Count >= 20) { SetStatus("STATUS: The limit of 20 candidates has been reached.", true); return; }
         var start = 0d;
         foreach (var existing in _clips.OrderBy(clip => clip.Start))
             if (start < existing.End && start + 30 > existing.Start) start = existing.End;
         var remaining = _scan.Duration > 0 ? _scan.Duration - start : 30;
         var duration = Math.Min(30, remaining);
         if (duration <= 0)
-        { SetStatus("STATUS: tidak ada rentang kosong untuk timestamp tambahan.", true); return; }
+        { SetStatus("STATUS: No unused range is available for another timestamp.", true); return; }
         var index = _clips.Count + 1;
-        var clip = new ClipCandidate { Name = $"custom_{index:00}", Start = start, End = start + duration, Hook = "Timestamp custom", Reason = "Rentang waktu ditentukan manual." };
+        var clip = new ClipCandidate { Name = $"custom_{index:00}", Start = start, End = start + duration, Hook = "Custom timestamp", Reason = "Time range set manually." };
         _clips.Add(clip); ClipList.Items.Refresh(); ClipList.SelectedItem = clip;
         SaveManifestEdits();
     }
 
     private void UpdateTimestampButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ClipList.SelectedItem is not ClipCandidate clip || _scan is null) { SetStatus("STATUS: pilih kandidat untuk mengatur timestamp.", true); return; }
+        if (ClipList.SelectedItem is not ClipCandidate clip || _scan is null) { SetStatus("STATUS: Select a candidate to edit its timestamps.", true); return; }
         if (!TimeSpan.TryParse(StartTimeBox.Text, out var start) || !TimeSpan.TryParse(EndTimeBox.Text, out var end) || start.TotalSeconds < 0 || end <= start || (_scan.Duration > 0 && end.TotalSeconds > _scan.Duration))
-        { SetStatus("STATUS: pastikan timestamp HH:MM:SS valid, mulai sebelum selesai, dan berada di dalam video.", true); return; }
+        { SetStatus("STATUS: Enter valid HH:MM:SS timestamps. The start must come before the end and both must fall within the video.", true); return; }
         if (_clips.Any(other => !ReferenceEquals(other, clip) && start.TotalSeconds < other.End && other.Start < end.TotalSeconds))
-        { SetStatus("STATUS: timestamp ini bertumpang tindih dengan kandidat lain.", true); return; }
+        { SetStatus("STATUS: These timestamps overlap another candidate.", true); return; }
         clip.Start = start.TotalSeconds; clip.End = end.TotalSeconds;
         ClipList.Items.Refresh();
         SaveManifestEdits();
-        SetStatus("STATUS: timestamp diperbarui.");
+        SetStatus("STATUS: Timestamps updated.");
     }
 
     private void SetUploadMetadataEditor(ClipCandidate? clip)
@@ -676,9 +702,13 @@ public partial class MainWindow : Window
         var titleLength = new System.Globalization.StringInfo(YouTubeTitleBox.Text).LengthInTextElements;
         var descriptionLength = new System.Globalization.StringInfo(YouTubeDescriptionBox.Text).LengthInTextElements;
         YouTubeTitleCountText.Text = $"{titleLength} / 100";
-        YouTubeTitleCountText.Foreground = titleLength > 100 ? WpfBrushes.IndianRed : WpfBrushes.Gray;
+        YouTubeTitleCountText.Foreground = titleLength > 100
+            ? (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["ErrorBrush"]
+            : (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["MutedTextBrush"];
         YouTubeDescriptionCountText.Text = $"{descriptionLength} / 5000";
-        YouTubeDescriptionCountText.Foreground = descriptionLength > 5000 ? WpfBrushes.IndianRed : WpfBrushes.Gray;
+        YouTubeDescriptionCountText.Foreground = descriptionLength > 5000
+            ? (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["ErrorBrush"]
+            : (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["MutedTextBrush"];
         CopyYouTubeTitleButton.IsEnabled = ClipList.SelectedItem is not null && titleLength is > 0 and <= 100;
         CopyYouTubeDescriptionButton.IsEnabled = ClipList.SelectedItem is not null && descriptionLength is > 0 and <= 5000;
     }
@@ -690,11 +720,11 @@ public partial class MainWindow : Window
         var length = new System.Globalization.StringInfo(title).LengthInTextElements;
         if (length is 0 or > 100)
         {
-            SetStatus("STATUS: judul harus berisi 1–100 karakter.", true);
+            SetStatus("STATUS: The title must contain 1 to 100 characters.", true);
             return;
         }
         System.Windows.Clipboard.SetText(title);
-        SetStatus($"STATUS: judul ({length}/100 karakter) disalin.");
+        SetStatus($"STATUS: Title copied ({length}/100 characters).");
     }
 
     private void CopyYouTubeDescriptionButton_Click(object sender, RoutedEventArgs e)
@@ -704,18 +734,18 @@ public partial class MainWindow : Window
         var length = new System.Globalization.StringInfo(description).LengthInTextElements;
         if (length is 0 or > 5000)
         {
-            SetStatus("STATUS: deskripsi harus berisi 1–5.000 karakter.", true);
+            SetStatus("STATUS: The description must contain no more than 5,000 characters.", true);
             return;
         }
         System.Windows.Clipboard.SetText(description);
-        SetStatus($"STATUS: deskripsi dan hashtag ({length}/5000 karakter) disalin.");
+        SetStatus($"STATUS: Description and hashtags copied ({length}/5,000 characters).");
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "Pilih folder hasil klip",
+            Description = "Select the output folder",
             SelectedPath = Directory.Exists(OutputBox.Text) ? OutputBox.Text : Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
             UseDescriptionForTitle = true
         };
@@ -723,7 +753,7 @@ public partial class MainWindow : Window
         OutputBox.Text = dialog.SelectedPath;
         _settings.OutputFolder = dialog.SelectedPath;
         SettingsStore.Save(_settings);
-        SetStatus("STATUS: folder output disimpan.");
+        SetStatus("STATUS: Output folder saved.");
     }
 
     private void OpenFolderButton_Click(object sender, RoutedEventArgs e)
@@ -732,27 +762,771 @@ public partial class MainWindow : Window
         Process.Start(new ProcessStartInfo { FileName = OutputBox.Text, UseShellExecute = true });
     }
 
+    private void WorkspaceMode_Click(object sender, RoutedEventArgs e)
+    {
+        SetWorkspaceMode(ReferenceEquals(sender, YouTubeModeButton));
+    }
+
+    private void SetWorkspaceMode(bool youtubeMode)
+    {
+        EditorModeButton.IsChecked = !youtubeMode;
+        YouTubeModeButton.IsChecked = youtubeMode;
+        EditorSourcePanel.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        EditorOptionsPanel.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        ClipListGroupBox.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        EditorClipDetailsPanel.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        EditorPreviewGroup.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        EditorStyleGroup.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        YouTubeWorkspacePanel.Visibility = youtubeMode ? Visibility.Visible : Visibility.Collapsed;
+        EditorFooter.Visibility = youtubeMode ? Visibility.Collapsed : Visibility.Visible;
+        UploadFooter.Visibility = youtubeMode ? Visibility.Visible : Visibility.Collapsed;
+        if (youtubeMode)
+        {
+            UploadScheduleGrid.Items.Refresh();
+            UpdateUploadQueueSummary();
+            SetStatus(_uploadItems.Count == 0
+                ? "STATUS: Finished renders will appear in the publication queue."
+                : "STATUS: Select videos to schedule. Finished renders are added automatically.");
+        }
+    }
+
+    private void AddRenderedClipToUploadQueue(string filePath, ClipCandidate clip)
+    {
+        var fullPath = Path.GetFullPath(filePath);
+        var item = _uploadItems.FirstOrDefault(existing => !string.IsNullOrWhiteSpace(existing.FilePath)
+            && string.Equals(Path.GetFullPath(existing.FilePath), fullPath, StringComparison.OrdinalIgnoreCase));
+        if (item is null)
+        {
+            item = new YouTubeUploadItem
+            {
+                FilePath = fullPath,
+                ClipName = Path.GetFileName(fullPath),
+                Title = clip.YouTubeTitle,
+                Description = clip.YouTubeDescription,
+                IsSelected = true
+            };
+            item.PropertyChanged += UploadItem_PropertyChanged;
+            _uploadItems.Add(item);
+        }
+        else
+        {
+            item.IsSelected = true;
+            item.Title = clip.YouTubeTitle;
+            item.Description = clip.YouTubeDescription;
+        }
+
+        UploadScheduleGrid.SelectedItem = item;
+        RefreshQueueNumbers();
+        UploadScheduleGrid.Items.Refresh();
+        PersistUploadQueue();
+        UpdateUploadQueueSummary();
+        WriteLog("Finished render added to the YouTube queue: " + Path.GetFileName(fullPath));
+    }
+
+    private void AddVideosToUploadQueue_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new WpfOpenFileDialog
+        {
+            Title = "Add videos to the publication queue",
+            Filter = "Video MP4 (*.mp4)|*.mp4",
+            Multiselect = true,
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        var added = 0;
+        YouTubeUploadItem? lastAdded = null;
+        foreach (var path in dialog.FileNames)
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (_uploadItems.Any(item => !string.IsNullOrWhiteSpace(item.FilePath)
+                && string.Equals(Path.GetFullPath(item.FilePath), fullPath, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            lastAdded = new YouTubeUploadItem
+            {
+                FilePath = fullPath,
+                ClipName = Path.GetFileName(fullPath),
+                Title = Path.GetFileNameWithoutExtension(fullPath),
+                IsSelected = true
+            };
+            lastAdded.PropertyChanged += UploadItem_PropertyChanged;
+            _uploadItems.Add(lastAdded);
+            added++;
+        }
+
+        if (added == 0)
+        {
+            SetStatus("STATUS: Every selected video is already in the queue.");
+            return;
+        }
+
+        RefreshQueueNumbers();
+        UploadScheduleGrid.SelectedItem = lastAdded;
+        PersistUploadQueue();
+        UploadScheduleGrid.Items.Refresh();
+        UpdateUploadQueueSummary();
+        SetStatus($"STATUS: Added {added} video{(added == 1 ? "" : "s")} to the publication queue.");
+    }
+
+    private void ImportUploadMetadata_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new WpfOpenFileDialog
+        {
+            Title = "Import metadata from a Clipper Python file",
+            Filter = "Clipper Python manifest (*.py)|*.py|All files (*.*)|*.*",
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var loaded = ClipperJobScript.Load(dialog.FileName);
+            var outputFolder = OutputBox.Text;
+            var outputFiles = Directory.Exists(outputFolder)
+                ? Directory.EnumerateFiles(outputFolder, "*.mp4", SearchOption.TopDirectoryOnly).ToList()
+                : [];
+            outputFiles.AddRange(_uploadItems.Where(item => File.Exists(item.FilePath)).Select(item => item.FilePath));
+            var fileByName = outputFiles
+                .GroupBy(path => Path.GetFileNameWithoutExtension(path), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var matched = 0;
+            var unmatched = new List<string>();
+
+            foreach (var clip in loaded.Clips)
+            {
+                var outputName = Path.GetFileNameWithoutExtension(ClipPipeline.BuildFileName(loaded.Manifest.Source.Title, clip));
+                if (!fileByName.TryGetValue(outputName, out var videoPath))
+                {
+                    unmatched.Add(clip.Name);
+                    continue;
+                }
+
+                var fullPath = Path.GetFullPath(videoPath);
+                var item = _uploadItems.FirstOrDefault(existing =>
+                    string.Equals(Path.GetFullPath(existing.FilePath), fullPath, StringComparison.OrdinalIgnoreCase));
+                if (item is null)
+                {
+                    item = new YouTubeUploadItem
+                    {
+                        FilePath = fullPath,
+                        ClipName = Path.GetFileName(fullPath),
+                        IsSelected = true
+                    };
+                    item.PropertyChanged += UploadItem_PropertyChanged;
+                    _uploadItems.Add(item);
+                }
+
+                var title = string.IsNullOrWhiteSpace(clip.YouTubeTitle) ? loaded.Manifest.YouTubeTitle : clip.YouTubeTitle;
+                var description = string.IsNullOrWhiteSpace(clip.YouTubeDescription) ? loaded.Manifest.YouTubeDescription : clip.YouTubeDescription;
+                if (!string.IsNullOrWhiteSpace(title)) item.Title = title;
+                if (!string.IsNullOrWhiteSpace(description)) item.Description = description;
+                item.IsSelected = true;
+                matched++;
+            }
+
+            RefreshQueueNumbers();
+            PersistUploadQueue();
+            UploadScheduleGrid.Items.Refresh();
+            UpdateUploadQueueSummary();
+            if (matched > 0)
+            {
+                _selectedUploadItem = _uploadItems.LastOrDefault(item => item.IsSelected);
+                UploadScheduleGrid.SelectedItem = _selectedUploadItem;
+            }
+
+            var message = matched == 0
+                ? "No rendered video matched this manifest. Add the original MP4 files or place them in the configured output folder, then import the manifest again."
+                : $"Imported metadata for {matched} video{(matched == 1 ? "" : "s")}.";
+            if (unmatched.Count > 0 && matched > 0)
+                message += $" {unmatched.Count} manifest item{(unmatched.Count == 1 ? " was" : "s were")} not matched by filename.";
+            SetStatus("STATUS: " + message, matched == 0);
+            if (matched == 0 || unmatched.Count > 0)
+                WpfMessageBox.Show(this, message, "Metadata import", MessageBoxButton.OK,
+                    matched == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("STATUS: Metadata could not be imported.", true);
+            WriteLog("ERROR: " + ex.Message);
+            WpfMessageBox.Show(this, ex.Message, "Metadata import", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void UploadScheduleGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        CommitUploadQueueMetadata();
+        PersistUploadQueue();
+        _selectedUploadItem = UploadScheduleGrid.SelectedItem as YouTubeUploadItem;
+        _loadingQueueMetadata = true;
+        QueueTitleBox.Text = _selectedUploadItem?.Title ?? string.Empty;
+        QueueDescriptionBox.Text = _selectedUploadItem?.Description ?? string.Empty;
+        if (_selectedUploadItem?.PublishAt is { } scheduled)
+        {
+            var local = TimeZoneInfo.ConvertTime(scheduled, GetWibTimeZone());
+            PublishDatePicker.SelectedDate = local.Date;
+            PublishTimeBox.Text = local.ToString("HH:mm", CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            PublishDatePicker.SelectedDate = GetWibNow().Date;
+            PublishTimeBox.Text = "19:30";
+        }
+        var canEdit = _youtubeCts is null
+            && _selectedUploadItem is not null
+            && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        QueueTitleBox.IsEnabled = canEdit;
+        QueueDescriptionBox.IsEnabled = canEdit;
+        PublishDatePicker.IsEnabled = canEdit;
+        PublishTimeBox.IsEnabled = canEdit;
+        _loadingQueueMetadata = false;
+        RemoveUploadQueueItemButton.IsEnabled = UploadScheduleGrid.SelectedItems.Count > 0 && _youtubeCts is null;
+        UpdateQueueActionButtons();
+    }
+
+    private void SelectAllUpload_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSelection) return;
+        _updatingSelection = true;
+        var select = _uploadItems.Any(item => !item.IsSelected);
+        foreach (var item in _uploadItems) item.IsSelected = select;
+        _updatingSelection = false;
+        PersistUploadQueue();
+        UpdateUploadQueueSummary();
+    }
+
+    private void UploadItem_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(YouTubeUploadItem.IsSelected) || _updatingSelection) return;
+        PersistUploadQueue();
+        UpdateUploadQueueSummary();
+    }
+
+    private void MoveQueueUp_Click(object sender, RoutedEventArgs e) => MoveSelectedQueueRows(up: true);
+
+    private void MoveQueueDown_Click(object sender, RoutedEventArgs e) => MoveSelectedQueueRows(up: false);
+
+    private void MoveSelectedQueueRows(bool up)
+    {
+        var selected = UploadScheduleGrid.SelectedItems.Cast<YouTubeUploadItem>().ToHashSet();
+        if (selected.Count == 0) return;
+
+        if (up)
+        {
+            for (var index = 1; index < _uploadItems.Count; index++)
+            {
+                if (selected.Contains(_uploadItems[index]) && !selected.Contains(_uploadItems[index - 1]))
+                    _uploadItems.Move(index, index - 1);
+            }
+        }
+        else
+        {
+            for (var index = _uploadItems.Count - 2; index >= 0; index--)
+            {
+                if (selected.Contains(_uploadItems[index]) && !selected.Contains(_uploadItems[index + 1]))
+                    _uploadItems.Move(index, index + 1);
+            }
+        }
+
+        UploadScheduleGrid.SelectedItems.Clear();
+        foreach (var item in selected) UploadScheduleGrid.SelectedItems.Add(item);
+        RefreshQueueNumbers();
+        PersistUploadQueue();
+        UpdateUploadQueueSummary();
+    }
+
+    private async void YouTubeConnection_Click(object sender, RoutedEventArgs e)
+    {
+        if (_youtubeService is not null)
+        {
+            var choice = WpfMessageBox.Show(this,
+                "Disconnect the YouTube account on this PC? Clipper will remove its saved sign-in token.",
+                "Disconnect YouTube", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (choice != MessageBoxResult.Yes) return;
+
+            _youtubeService.Dispose();
+            _youtubeService = null;
+            await new ProtectedYouTubeTokenStore().ClearAsync();
+            UpdateQueueActionButtons();
+            SetStatus("STATUS: YouTube account disconnected on this PC.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.YouTubeClientSecretsJson))
+        {
+            var dialog = new WpfOpenFileDialog
+            {
+                Title = "Select a Google OAuth Desktop client JSON file",
+                Filter = "JSON credentials (*.json)|*.json|All files (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (dialog.ShowDialog(this) != true) return;
+
+            try
+            {
+                var clientJson = File.ReadAllText(dialog.FileName);
+                ValidateYouTubeClientSecrets(clientJson);
+                _settings.YouTubeClientSecretsJson = clientJson;
+                SettingsStore.Save(_settings);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("STATUS: The selected OAuth file is not a valid Desktop client file.", true);
+                WpfMessageBox.Show(this, ex.Message, "YouTube setup", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+
+        _youtubeCts = new CancellationTokenSource();
+        YouTubeConnectionButton.IsEnabled = false;
+        UploadDisabledButton.IsEnabled = false;
+        SetStatus("STATUS: Opening Google sign-in...");
+        try
+        {
+            _youtubeService = await _youtubeUploader.ConnectAsync(
+                _settings.YouTubeClientSecretsJson,
+                _youtubeCts.Token);
+            SetStatus("STATUS: YouTube account connected on this PC.");
+            WriteLog("YouTube OAuth authorization completed.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("STATUS: YouTube could not connect. Check the OAuth setup and try again.", true);
+            WriteLog("YouTube connection failed: " + ex.Message);
+            WpfMessageBox.Show(this, ex.Message, "YouTube connection", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _youtubeCts?.Dispose();
+            _youtubeCts = null;
+            UpdateQueueActionButtons();
+        }
+    }
+
+    private static void ValidateYouTubeClientSecrets(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("installed", out var installed)
+            || !installed.TryGetProperty("client_id", out _)
+            || !installed.TryGetProperty("client_secret", out _))
+            throw new InvalidOperationException(
+                "Choose the JSON file for an OAuth client with application type Desktop app. Enable YouTube Data API v3 in the same Google Cloud project first.");
+    }
+
+    private async void UploadSelectedVideos_Click(object sender, RoutedEventArgs e)
+    {
+        CommitUploadQueueMetadata();
+        var selected = _uploadItems.Where(item => item.IsSelected).ToList();
+        if (_youtubeService is null)
+        {
+            SetStatus("STATUS: Connect a YouTube channel before uploading.", true);
+            return;
+        }
+        if (selected.Count == 0)
+        {
+            SetStatus("STATUS: Check the videos you want to upload.", true);
+            return;
+        }
+
+        var invalid = selected.FirstOrDefault(item =>
+            !File.Exists(item.FilePath)
+            || string.IsNullOrWhiteSpace(item.Title)
+            || item.Title.Length > 100
+            || item.Description.Length > 5000
+            || item.PublishAt is not { } publishAt
+            || publishAt <= DateTimeOffset.UtcNow
+            || !string.IsNullOrWhiteSpace(item.YouTubeVideoId));
+        var uncertain = selected.FirstOrDefault(item => item.UploadStatus == "Check YouTube Studio");
+        if (uncertain is not null)
+        {
+            var uncertainItems = selected.Where(item => item.UploadStatus == "Check YouTube Studio").ToList();
+            var names = string.Join(Environment.NewLine, uncertainItems.Take(3).Select(item => item.FileName));
+            if (uncertainItems.Count > 3) names += Environment.NewLine + $"and {uncertainItems.Count - 3} more";
+            var retryChoice = WpfMessageBox.Show(this,
+                $"Confirm that these videos do not appear in YouTube Studio before retrying. Retrying a video that is already there can create a duplicate.{Environment.NewLine}{Environment.NewLine}{names}{Environment.NewLine}{Environment.NewLine}Retry the selected videos?",
+                "Confirm YouTube upload retry", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (retryChoice != MessageBoxResult.Yes) return;
+            foreach (var item in uncertainItems) item.UploadStatus = "Queued";
+        }
+        if (invalid is not null)
+        {
+            SetStatus($"STATUS: Check the title, description, local file, and future publish time for {invalid.FileName}.", true);
+            return;
+        }
+
+        var choice = WpfMessageBox.Show(this,
+            $"Upload {selected.Count} selected video{(selected.Count == 1 ? "" : "s")} now? YouTube will keep each video Private and publish it at its scheduled WIB time.",
+            "Upload scheduled videos", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (choice != MessageBoxResult.Yes) return;
+
+        _youtubeCts = new CancellationTokenSource();
+        UpdateQueueActionButtons();
+        WorkProgress.IsIndeterminate = false;
+        WorkProgress.Value = 0;
+        var failures = 0;
+        try
+        {
+            for (var index = 0; index < selected.Count; index++)
+            {
+                _youtubeCts.Token.ThrowIfCancellationRequested();
+                var item = selected[index];
+                item.UploadStatus = "Uploading";
+                PersistUploadQueue();
+                var totalBytes = new FileInfo(item.FilePath).Length;
+                var progress = new Progress<IUploadProgress>(update =>
+                {
+                    var percent = totalBytes > 0 ? Math.Clamp(update.BytesSent * 100.0 / totalBytes, 0, 100) : 0;
+                    WorkProgress.IsIndeterminate = false;
+                    WorkProgress.Value = (index + percent / 100.0) * 100.0 / selected.Count;
+                    SetStatus($"STATUS: Uploading {index + 1}/{selected.Count}: {item.FileName} ({percent:0}%).");
+                });
+
+                try
+                {
+                    var uploaded = await _youtubeUploader.UploadScheduledAsync(
+                        _youtubeService,
+                        item,
+                        progress,
+                        _youtubeCts.Token);
+                    item.YouTubeVideoId = uploaded.Id ?? string.Empty;
+                    item.UploadStatus = "Scheduled on YouTube";
+                    item.IsSelected = false;
+                    WriteLog($"Scheduled on YouTube: {item.FileName} (https://youtu.be/{uploaded.Id})");
+                }
+                catch (OperationCanceledException) when (_youtubeCts.IsCancellationRequested)
+                {
+                    item.UploadStatus = "Upload interrupted";
+                    PersistUploadQueue();
+                    throw;
+                }
+                catch (YouTubeUploadOutcomeUnknownException ex)
+                {
+                    failures++;
+                    item.UploadStatus = "Check YouTube Studio";
+                    item.IsSelected = false;
+                    WriteLog($"Upload outcome needs review for {item.FileName}: {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    failures++;
+                    item.UploadStatus = "Upload failed";
+                    WriteLog($"Upload failed for {item.FileName}: {ex.Message}");
+                }
+
+                PersistUploadQueue();
+                UploadScheduleGrid.Items.Refresh();
+                UpdateUploadQueueSummary();
+                WorkProgress.Value = (index + 1) * 100.0 / selected.Count;
+            }
+
+            SetStatus(failures == 0
+                ? $"STATUS: {selected.Count} video{(selected.Count == 1 ? "" : "s")} uploaded and scheduled on YouTube."
+                : $"STATUS: Upload finished with {failures} error{(failures == 1 ? "" : "s")}. Review the YouTube status column and process log.", failures > 0);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("STATUS: Upload was interrupted. Check YouTube Studio before retrying to avoid a duplicate upload.", true);
+        }
+        finally
+        {
+            _youtubeCts?.Dispose();
+            _youtubeCts = null;
+            WorkProgress.IsIndeterminate = false;
+            UpdateQueueActionButtons();
+        }
+    }
+
+    private void QueueMetadata_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (_loadingQueueMetadata || _selectedUploadItem is null) return;
+        _selectedUploadItem.Title = QueueTitleBox.Text;
+        _selectedUploadItem.Description = QueueDescriptionBox.Text;
+    }
+
+    private void QueueMetadata_LostFocus(object sender, RoutedEventArgs e)
+    {
+        CommitUploadQueueMetadata();
+        PersistUploadQueue();
+    }
+
+    private void CommitUploadQueueMetadata()
+    {
+        if (_selectedUploadItem is null || _loadingQueueMetadata) return;
+        _selectedUploadItem.Title = QueueTitleBox.Text.Trim();
+        _selectedUploadItem.Description = QueueDescriptionBox.Text.Trim();
+    }
+
+    private void UploadSelection_Click(object sender, RoutedEventArgs e)
+    {
+        PersistUploadQueue();
+        UpdateUploadQueueSummary();
+    }
+
+    private void AutoScheduleButton_Click(object sender, RoutedEventArgs e)
+    {
+        CommitUploadQueueMetadata();
+        var waiting = _uploadItems.Where(item => item.IsSelected
+            && item.PublishAt is null
+            && string.IsNullOrWhiteSpace(item.YouTubeVideoId)
+            && File.Exists(item.FilePath)).ToList();
+        if (waiting.Count == 0)
+        {
+            var selectedCount = _uploadItems.Count(item => item.IsSelected);
+            SetStatus(selectedCount == 0
+                ? "STATUS: Select the videos you want to schedule."
+                : "STATUS: Selected videos already have publish times, are on YouTube, or have missing files.", selectedCount == 0);
+            return;
+        }
+
+        var occupied = _uploadItems.Where(item => item.PublishAt.HasValue)
+            .Select(item => item.PublishAt!.Value).ToHashSet();
+        var cursor = GetWibNow();
+        try
+        {
+            foreach (var item in waiting)
+            {
+                var slot = FindNextScheduleSlot(cursor, occupied);
+                item.PublishAt = slot;
+                occupied.Add(slot);
+                cursor = slot;
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            SetStatus("STATUS: " + ex.Message, true);
+            return;
+        }
+
+        PersistUploadQueue();
+        UploadScheduleGrid.Items.Refresh();
+        UpdateUploadQueueSummary();
+        SetStatus($"STATUS: Assigned WIB publish times to {waiting.Count} video{(waiting.Count == 1 ? "" : "s")}.");
+        WriteLog($"Auto-Schedule assigned {waiting.Count} WIB slot{(waiting.Count == 1 ? "" : "s")} in the local Clipper98 queue.");
+    }
+
+    private void SetPublishTime_Click(object sender, RoutedEventArgs e)
+    {
+        CommitUploadQueueMetadata();
+        if (_selectedUploadItem is null || !_selectedUploadItem.IsSelected)
+        {
+            SetStatus("STATUS: Select and check one video before setting its publish time.", true);
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId))
+        {
+            SetStatus("STATUS: This video is already scheduled on YouTube. Change its publish time in YouTube Studio.", true);
+            return;
+        }
+        if (!File.Exists(_selectedUploadItem.FilePath))
+        {
+            SetStatus("STATUS: The local video file could not be found.", true);
+            return;
+        }
+        if (PublishDatePicker.SelectedDate is not { } date
+            || !TimeOnly.TryParse(PublishTimeBox.Text, CultureInfo.InvariantCulture, out var time))
+        {
+            SetStatus("STATUS: Enter a valid WIB date and 24-hour time, such as 19:30.", true);
+            return;
+        }
+
+        var zone = GetWibTimeZone();
+        var wallClock = DateTime.SpecifyKind(date.Date.Add(time.ToTimeSpan()), DateTimeKind.Unspecified);
+        var scheduled = new DateTimeOffset(wallClock, zone.GetUtcOffset(wallClock));
+        if (scheduled <= GetWibNow())
+        {
+            SetStatus("STATUS: The publish time must be in the future.", true);
+            return;
+        }
+        if (_uploadItems.Any(item => !ReferenceEquals(item, _selectedUploadItem)
+            && item.PublishAt is { } existing && existing == scheduled))
+        {
+            SetStatus("STATUS: Another video in this local queue already uses that time.", true);
+            return;
+        }
+
+        _selectedUploadItem.PublishAt = scheduled;
+        PersistUploadQueue();
+        UploadScheduleGrid.Items.Refresh();
+        UpdateUploadQueueSummary();
+        SetStatus($"STATUS: Publish time saved for {scheduled:MMM d, yyyy h:mm tt} WIB.");
+    }
+
+    private void ClearPublishTime_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedUploadItem is null)
+        {
+            SetStatus("STATUS: Select a video to clear its publish time.", true);
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId))
+        {
+            SetStatus("STATUS: This video is already scheduled on YouTube. Change its publish time in YouTube Studio.", true);
+            return;
+        }
+        _selectedUploadItem.PublishAt = null;
+        PersistUploadQueue();
+        UploadScheduleGrid.Items.Refresh();
+        UpdateUploadQueueSummary();
+        SetStatus("STATUS: Publish time cleared from the local queue.");
+    }
+
+    private void RemoveUploadQueueItem_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = UploadScheduleGrid.SelectedItems.Cast<YouTubeUploadItem>().ToList();
+        if (selected.Count == 0)
+        {
+            SetStatus("STATUS: Select one or more queue rows to remove.", true);
+            return;
+        }
+        foreach (var item in selected) _uploadItems.Remove(item);
+        _selectedUploadItem = null;
+        QueueTitleBox.Clear();
+        QueueDescriptionBox.Clear();
+        UploadScheduleGrid.SelectedItem = null;
+        RefreshQueueNumbers();
+        PersistUploadQueue();
+        UpdateUploadQueueSummary();
+        SetStatus($"STATUS: Removed {selected.Count} row{(selected.Count == 1 ? "" : "s")} from the queue. Video files remain on disk.");
+    }
+
+    private void PersistUploadQueue()
+    {
+        _settings.YouTubeUploadQueue = _uploadItems.ToList();
+        SettingsStore.Save(_settings);
+    }
+
+    private void RefreshQueueNumbers()
+    {
+        for (var index = 0; index < _uploadItems.Count; index++)
+            _uploadItems[index].QueueNumber = index + 1;
+        UploadScheduleGrid.Items.Refresh();
+        UpdateSelectAllState();
+    }
+
+    private void UpdateUploadQueueSummary()
+    {
+        if (UploadQueueSummaryText is null) return;
+        var selectedItems = _uploadItems.Where(item => item.IsSelected).ToList();
+        var scheduled = selectedItems.Count(item => item.PublishAt.HasValue);
+        UploadQueueSummaryText.Text = $"{selectedItems.Count} selected · {scheduled} scheduled · times use WIB";
+        UploadEmptyStateText.Visibility = _uploadItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateQueueActionButtons();
+    }
+
+    private void UpdateSelectAllState()
+    {
+        if (SelectAllUploadCheckBox is null) return;
+        var selected = _uploadItems.Count(item => item.IsSelected);
+        _updatingSelection = true;
+        SelectAllUploadCheckBox.IsChecked = selected == 0 ? false : selected == _uploadItems.Count ? true : null;
+        _updatingSelection = false;
+    }
+
+    private void UpdateQueueActionButtons()
+    {
+        if (UploadScheduleGrid is null || UploadDisabledButton is null) return;
+        var busy = _youtubeCts is not null;
+        var selected = _uploadItems.Where(item => item.IsSelected).ToList();
+        var ready = selected.Count > 0 && selected.All(item =>
+            File.Exists(item.FilePath)
+            && !string.IsNullOrWhiteSpace(item.Title)
+            && item.Title.Length <= 100
+            && item.Description.Length <= 5000
+            && item.PublishAt is { } publishAt
+            && publishAt > DateTimeOffset.UtcNow
+            && string.IsNullOrWhiteSpace(item.YouTubeVideoId));
+        UploadDisabledButton.IsEnabled = _youtubeService is not null && ready && !busy;
+        UploadDisabledButton.ToolTip = _youtubeService is null
+            ? "Connect a YouTube channel to enable scheduled uploads."
+            : ready
+                ? "Upload selected videos as Private and publish them at their scheduled WIB times."
+                : "Select videos with a local file, title, description within limits, and a future publish time.";
+        YouTubeConnectionButton.Content = _youtubeService is null ? "CONNECT YOUTUBE" : "DISCONNECT YOUTUBE";
+        YouTubeConnectionStatusText.Text = _youtubeService is null
+            ? "Not connected. Connect a YouTube channel to upload scheduled videos."
+            : "Connected. Selected videos will upload as Private and publish at their scheduled WIB times.";
+        AddQueueVideosButton.IsEnabled = !busy;
+        ImportQueueMetadataButton.IsEnabled = !busy;
+        MoveQueueUpButton.IsEnabled = !busy && UploadScheduleGrid.SelectedItems.Count > 0;
+        MoveQueueDownButton.IsEnabled = !busy && UploadScheduleGrid.SelectedItems.Count > 0;
+        RemoveUploadQueueItemButton.IsEnabled = !busy && UploadScheduleGrid.SelectedItems.Count > 0;
+        SelectAllUploadCheckBox.IsEnabled = !busy;
+        UploadScheduleGrid.IsReadOnly = busy;
+        var canEditMetadata = !busy && _selectedUploadItem is not null
+            && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        QueueTitleBox.IsEnabled = canEditMetadata;
+        QueueDescriptionBox.IsEnabled = canEditMetadata;
+        PublishDatePicker.IsEnabled = canEditMetadata;
+        PublishTimeBox.IsEnabled = canEditMetadata;
+        AutoScheduleButton.IsEnabled = !busy;
+        SetPublishTimeButton.IsEnabled = !busy && _selectedUploadItem is not null && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        ClearPublishTimeButton.IsEnabled = !busy && _selectedUploadItem is not null && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        YouTubeConnectionButton.IsEnabled = !busy;
+    }
+
+    private static DateTimeOffset GetWibNow() => TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, GetWibTimeZone());
+
+    private static TimeZoneInfo GetWibTimeZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); }
+        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Local; }
+        catch (InvalidTimeZoneException) { return TimeZoneInfo.Local; }
+    }
+
+    private static DateTimeOffset FindNextScheduleSlot(DateTimeOffset after, HashSet<DateTimeOffset> occupied)
+    {
+        var zone = GetWibTimeZone();
+        var localStart = TimeZoneInfo.ConvertTime(after, zone).Date;
+        for (var dayOffset = 0; dayOffset < 366; dayOffset++)
+        {
+            var date = localStart.AddDays(dayOffset);
+            var slots = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
+                ? WeekendPublishSlots
+                : WeekdayPublishSlots;
+            foreach (var slot in slots)
+            {
+                var wallClock = DateTime.SpecifyKind(date.Add(slot.ToTimeSpan()), DateTimeKind.Unspecified);
+                var candidate = new DateTimeOffset(wallClock, zone.GetUtcOffset(wallClock));
+                if (candidate <= after || occupied.Contains(candidate)) continue;
+                return candidate;
+            }
+        }
+        throw new InvalidOperationException("Tidak ditemukan slot publikasi kosong untuk 12 bulan ke depan.");
+    }
+
+    private static readonly TimeOnly[] WeekdayPublishSlots =
+    [
+        new(6, 30), new(9, 30), new(11, 45), new(13, 30),
+        new(16, 0), new(18, 0), new(19, 30), new(21, 15)
+    ];
+
+    private static readonly TimeOnly[] WeekendPublishSlots =
+    [
+        new(8, 0), new(10, 0), new(12, 0), new(14, 0),
+        new(16, 0), new(18, 15), new(20, 0), new(22, 0)
+    ];
+
     private void SetupButton_Click(object sender, RoutedEventArgs e)
     {
         var models = Path.Combine(AppContext.BaseDirectory, "tools", "models");
         var checks = new[]
         {
             ("yt-dlp.exe", ProcessRunner.FindTool("yt-dlp") is not null),
-            ("Node.js untuk YouTube", ProcessRunner.FindTool("node") is not null || ProcessRunner.FindCommand("node") is not null),
+            ("Node.js for YouTube", ProcessRunner.FindTool("node") is not null || ProcessRunner.FindCommand("node") is not null),
             ("ffmpeg.exe", ProcessRunner.FindTool("ffmpeg") is not null),
             ("whisper-cli.exe", ProcessRunner.FindTool("whisper-cli") is not null),
             ("Whisper Large-v3-Turbo", File.Exists(Path.Combine(models, "ggml-large-v3-turbo.bin"))),
-            ("Model face detection", File.Exists(Path.Combine(models, "haarcascade_frontalface_default.xml"))),
+            ("Face detection model", File.Exists(Path.Combine(models, "haarcascade_frontalface_default.xml"))),
             ("OpenCV native runtime", File.Exists(Path.Combine(AppContext.BaseDirectory, "OpenCvSharpExtern.dll")) || File.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "OpenCvSharpExtern.dll"))),
-            ("Frame PNG", string.IsNullOrWhiteSpace(_settings.FramePngPath) || File.Exists(_settings.FramePngPath))
+            ("PNG frame", string.IsNullOrWhiteSpace(_settings.FramePngPath) || File.Exists(_settings.FramePngPath))
         };
-        var report = string.Join(Environment.NewLine, checks.Select(item => $"{item.Item1}: {(item.Item2 ? "OK" : "belum ada")}"));
+        var report = string.Join(Environment.NewLine, checks.Select(item => $"{item.Item1}: {(item.Item2 ? "OK" : "Missing")}"));
         var downloadable = new HashSet<string>(StringComparer.Ordinal)
         {
-            "yt-dlp.exe", "Node.js untuk YouTube", "ffmpeg.exe", "whisper-cli.exe", "Whisper Large-v3-Turbo", "Model face detection"
+            "yt-dlp.exe", "Node.js for YouTube", "ffmpeg.exe", "whisper-cli.exe", "Whisper Large-v3-Turbo", "Face detection model"
         };
         var missing = checks.Where(item => !item.Item2 && downloadable.Contains(item.Item1)).Select(item => item.Item1).ToList();
-        new SetupWindow(report, missing) { Owner = this }.ShowDialog();
+        new SetupWindow(report, missing, _settings) { Owner = this }.ShowDialog();
     }
     private async void UrlBox_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -766,7 +1540,7 @@ public partial class MainWindow : Window
             UpdatePreview();
             return;
         }
-        SetStatus("STATUS: URL siap. Salin prompt untuk Gemini atau impor manifest .py.");
+        SetStatus("STATUS: URL ready. Copy the Gemini prompt or import a .py manifest.");
         var id = YouTubeVideoId(UrlBox.Text.Trim());
         if (id.Length > 0) await LoadYouTubeThumbnailAsync(id);
     }
@@ -808,16 +1582,16 @@ public partial class MainWindow : Window
         _settings.SubtitleSource = SelectedText(SubtitleSourceBox, "auto");
         SettingsStore.Save(_settings);
         WriteLog(_settings.SubtitleSource == "whisper"
-            ? "Transkrip disetel ke Whisper (transkrip ulang lokal)."
-            : "Transkrip disetel ke subtitle YouTube otomatis, dengan Whisper sebagai cadangan.");
+            ? "Transcript source set to Whisper (local transcription)."
+            : "Transcript source set to automatic YouTube subtitles, with Whisper as a fallback.");
     }
 
     private void FrameUploadButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new WpfOpenFileDialog
         {
-            Title = "Pilih frame PNG transparan 1080×1920",
-            Filter = "PNG transparan (*.png)|*.png",
+            Title = "Select a transparent 1080 x 1920 PNG frame",
+            Filter = "Transparent PNG (*.png)|*.png",
             CheckFileExists = true,
             Multiselect = false
         };
@@ -829,12 +1603,12 @@ public partial class MainWindow : Window
             SettingsStore.Save(_settings);
             FramePathText.Text = dialog.FileName;
             LoadFramePreview();
-            WriteLog("Frame PNG diterapkan ke preview dan render: " + dialog.FileName);
+            WriteLog("PNG frame applied to preview and render: " + dialog.FileName);
         }
         catch (Exception ex)
         {
-            SetStatus("STATUS: frame PNG tidak valid.", true);
-            WpfMessageBox.Show(ex.Message, "Frame PNG", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SetStatus("STATUS: The PNG frame is invalid.", true);
+            WpfMessageBox.Show(ex.Message, "PNG frame", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -842,7 +1616,7 @@ public partial class MainWindow : Window
     {
         var dialog = new WpfOpenFileDialog
         {
-            Title = "Import font untuk subtitle",
+            Title = "Import a subtitle font",
             Filter = "Font TrueType/OpenType (*.ttf;*.otf)|*.ttf;*.otf",
             CheckFileExists = true,
             Multiselect = false
@@ -860,11 +1634,11 @@ public partial class MainWindow : Window
             if (importedOption is not null)
                 SetCombo(FontStyleBox, FontStyleTag(importedOption.IsBoldFace, importedOption.IsItalicFace));
             UpdatePreview();
-            WriteLog($"Font diimpor: {importedOption?.FamilyName ?? Path.GetFileName(importedPath)} — {Path.GetFileName(importedPath)}");
+            WriteLog($"Font imported: {importedOption?.FamilyName ?? Path.GetFileName(importedPath)} ({Path.GetFileName(importedPath)})");
         }
         catch (Exception ex)
         {
-            SetStatus("STATUS: file font tidak bisa diimpor.", true);
+            SetStatus("STATUS: The font file could not be imported.", true);
             WpfMessageBox.Show(this, ex.Message, "Import font", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -882,8 +1656,8 @@ public partial class MainWindow : Window
         _settings.FramePngPath = string.Empty;
         SettingsStore.Save(_settings);
         PreviewFrame.Source = null;
-        FramePathText.Text = "Belum ada frame";
-        WriteLog("Frame PNG dilepas dari preview dan render.");
+        FramePathText.Text = "No frame selected";
+        WriteLog("PNG frame removed from the preview and render.");
     }
 
     private void LoadFramePreview()
@@ -906,17 +1680,17 @@ public partial class MainWindow : Window
     {
         using var stream = File.OpenRead(path);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        if (decoder.Frames.Count == 0) throw new InvalidDataException("PNG tidak memiliki frame gambar yang bisa dibaca.");
+        if (decoder.Frames.Count == 0) throw new InvalidDataException("The PNG does not contain a readable image frame.");
         var frame = decoder.Frames[0];
         if (frame.PixelWidth != 1080 || frame.PixelHeight != 1920)
-            throw new InvalidDataException($"Resolusi frame harus 1080×1920. File ini {frame.PixelWidth}×{frame.PixelHeight}.");
+            throw new InvalidDataException($"The frame must be 1080 x 1920 pixels. This file is {frame.PixelWidth} x {frame.PixelHeight}.");
         var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
         var stride = converted.PixelWidth * 4;
         var pixels = new byte[stride * converted.PixelHeight];
         converted.CopyPixels(pixels, stride, 0);
         for (var i = 3; i < pixels.Length; i += 4)
             if (pixels[i] < 255) return;
-        throw new InvalidDataException("PNG frame harus punya area transparan agar video tetap terlihat.");
+        throw new InvalidDataException("The PNG frame must contain transparent areas so the video remains visible.");
     }
 
     private void PresetBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -960,14 +1734,14 @@ public partial class MainWindow : Window
         var name = PresetNameBox.Text.Trim();
         if (name.Length is < 1 or > 32)
         {
-            SetStatus("STATUS: nama preset harus berisi 1–32 karakter.", true);
+            SetStatus("STATUS: Preset names must contain 1 to 32 characters.", true);
             return;
         }
 
         var existing = _settings.SubtitlePresets.FirstOrDefault(preset =>
             preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (existing is not null
-            && WpfMessageBox.Show($"Timpa preset ‘{existing.Name}’ dengan style saat ini?", "Simpan preset",
+            && WpfMessageBox.Show($"Replace preset “{existing.Name}” with the current style?", "Save preset",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
@@ -989,8 +1763,8 @@ public partial class MainWindow : Window
         PresetBox.SelectedItem = item;
         PresetNameBox.Clear();
         UpdatePresetDeleteButton();
-        WriteLog($"Preset subtitle ‘{name}’ disimpan.");
-        SetStatus($"STATUS: preset ‘{name}’ disimpan.");
+        WriteLog($"Subtitle preset “{name}” saved.");
+        SetStatus($"STATUS: Preset “{name}” saved.");
     }
 
     private void DeletePresetButton_Click(object sender, RoutedEventArgs e)
@@ -1004,7 +1778,7 @@ public partial class MainWindow : Window
         PresetBox.Items.Remove(item);
         PresetBox.SelectedIndex = 0;
         UpdatePresetDeleteButton();
-        WriteLog($"Preset subtitle ‘{name}’ dihapus.");
+        WriteLog($"Subtitle preset “{name}” deleted.");
     }
 
     private void UpdatePresetDeleteButton()
@@ -1125,10 +1899,10 @@ public partial class MainWindow : Window
     {
         if (SelectedText(TextColorBox, "White") == "custom"
             && !System.Text.RegularExpressions.Regex.IsMatch(TextColorHexBox.Text.Trim(), @"^#[0-9A-Fa-f]{6}$"))
-            throw new InvalidOperationException("Warna teks kustom harus memakai format HEX #RRGGBB.");
+            throw new InvalidOperationException("Custom text colors must use HEX format #RRGGBB.");
         if (SelectedText(HighlightColorBox, "Yellow") == "custom"
             && !System.Text.RegularExpressions.Regex.IsMatch(HighlightColorHexBox.Text.Trim(), @"^#[0-9A-Fa-f]{6}$"))
-            throw new InvalidOperationException("Warna highlight kustom harus memakai format HEX #RRGGBB.");
+            throw new InvalidOperationException("Custom highlight colors must use HEX format #RRGGBB.");
     }
 
     private static string ColorToHex(string value) => value switch
@@ -1249,6 +2023,8 @@ public partial class MainWindow : Window
         RenderButton.IsEnabled = !busy && ClipList.SelectedItem is not null;
         CancelButton.IsEnabled = busy;
         SetupButton.IsEnabled = !busy;
+        EditorModeButton.IsEnabled = !busy;
+        YouTubeModeButton.IsEnabled = !busy;
         UpdateModeDependentControls();
         if (!busy) UpdateUploadMetadataCounters();
         Cursor = busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
@@ -1260,12 +2036,12 @@ public partial class MainWindow : Window
         try
         {
             ClipperJobScript.Save(_manifestPath, _manifest, _clips);
-            WriteLog("Perubahan kandidat dan metadata disimpan ke script Gemini.");
+            WriteLog("Candidate and metadata changes saved to the Gemini manifest.");
         }
         catch (Exception ex)
         {
-            SetStatus("STATUS: perubahan script gagal disimpan.", true);
-            WriteLog("ERROR simpan manifest: " + ex.Message);
+            SetStatus("STATUS: Changes could not be saved to the manifest.", true);
+            WriteLog("ERROR saving manifest: " + ex.Message);
         }
     }
 
@@ -1278,12 +2054,12 @@ public partial class MainWindow : Window
     {
         if (LogBox is null) return;
         var color = message.Contains("ERROR", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("gagal", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("failed", StringComparison.OrdinalIgnoreCase)
                 ? System.Windows.Media.Color.FromRgb(255, 112, 112)
                 : message.Contains("warning", StringComparison.OrdinalIgnoreCase)
                     ? System.Windows.Media.Color.FromRgb(255, 204, 102)
-                    : message.Contains("Selesai", StringComparison.OrdinalIgnoreCase)
-                        || message.Contains("berhasil", StringComparison.OrdinalIgnoreCase)
+                    : message.Contains("Completed", StringComparison.OrdinalIgnoreCase)
+                        || message.Contains("successfully", StringComparison.OrdinalIgnoreCase)
                             ? System.Windows.Media.Color.FromRgb(126, 220, 155)
                             : System.Windows.Media.Color.FromRgb(210, 222, 238);
         var paragraph = new Paragraph { Margin = new Thickness(0), LineHeight = 16 };

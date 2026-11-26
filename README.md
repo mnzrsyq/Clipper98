@@ -37,7 +37,7 @@ Pilih momen lewat Gemini, impor manifest ke Clipper98, lalu unduh dan render vid
 | **Framing** | Render vertikal 9:16, pertahankan rasio sumber, gunakan Smart Crop untuk mengikuti wajah, atau tambahkan frame PNG. Mode Ringkas Video juga menyediakan area isi 4:5 di kanvas 9:16. |
 | **Tampilan subtitle** | Pilih font Windows, kapitalisasi, ukuran, warna, highlight kata, outline, jumlah baris, dan posisi. Simpan preset sendiri. |
 | **Voice-over** | Tambahkan narasi pada Ringkas Video menggunakan Edge-TTS atau Fish Audio. Fish Audio memerlukan API key. |
-| **Metadata YouTube** | Edit dan salin judul serta deskripsi untuk tiap klip. Clipper98 tidak mengunggah video ke YouTube. |
+| **YouTube Publisher** | Masukkan hasil render baru otomatis ke antrean, impor metadata `.py` untuk video lama, pilih beberapa video, atur slot WIB otomatis atau manual, lalu unggah terjadwal. Video diunggah sebagai Private dengan audience default Not Made for Kids. |
 | **Cache lokal** | Gunakan ulang video, transkrip, analisis framing, dan audio narasi yang masih cocok. Cache bisa dibersihkan dari aplikasi. |
 
 Gemini membantu memilih momen dan membuat manifest. Clipper98 membaca file `.py` tersebut sebagai data sederhana; kode di dalam file tidak dijalankan.
@@ -50,6 +50,10 @@ Gemini membantu memilih momen dan membuat manifest. Clipper98 membaca file `.py`
 2. Unduh installer terbaru bernama `Clipper98-Setup-vX.Y.Z.exe`, lalu jalankan.
 3. Buka Clipper98 dari Start Menu atau shortcut Desktop.
 4. Saat pertama kali memakai fitur, buka **SETUP** dan pilih **UNDUH KOMPONEN KURANG**.
+
+### Menghubungkan YouTube
+
+Untuk mengunggah dan menjadwalkan video, aktifkan YouTube Data API v3 di Google Cloud dan buat OAuth client bertipe Desktop app. Jika proyek OAuth masih berstatus Testing, tambahkan akun Google pemilik channel sebagai test user. Di Clipper98, klik ikon YouTube, pilih **CONNECT YOUTUBE**, lalu pilih file OAuth JSON. Lihat [panduan resmi YouTube Data API](https://developers.google.com/youtube/data/guides/authentication). Token OAuth pada proyek External berstatus Testing akan kedaluwarsa setelah tujuh hari.
 
 Installer ditujukan untuk **Windows x64** dan menyertakan runtime .NET yang diperlukan. Pengguna tidak perlu memasang .NET Runtime sendiri. Installer tidak menyertakan yt-dlp, Node.js, FFmpeg, whisper.cpp, atau model Whisper; Clipper98 mengunduh komponen yang diperlukan ke PC saat diminta. Model Whisper Large-v3-Turbo berukuran sekitar 1,5 GiB.
 
@@ -71,7 +75,9 @@ Sebelum pertama kali memakai Clipper98, buat dua skill Gemini satu kali. Ikuti [
 4. Buka chat baru di [Gemini](https://gemini.google.com). Ketik `/`, pilih skill **clipper** untuk Klip Pendek atau **clipper-ringkas** untuk Ringkas Video, lalu tempel prompt yang disalin.
 5. Gemini menampilkan manifest dalam blok kode. Salin mulai dari `CLIPPER_JOB =` sampai kurung penutupnya saja. Buka Notepad, tempel isi tersebut, lalu pilih **Save as**. Simpan dengan nama berakhiran `.py`, misalnya `clipper_job.py`. Pada **Save as type** atau **Jenis file**, pilih **All files** agar file tidak tersimpan sebagai `.py.txt`.
 6. Kembali ke Clipper98, klik **IMPORT .PY**, lalu pilih file yang baru disimpan. Periksa kandidat, timestamp, dan narasi sebelum render.
-7. Atur subtitle, framing, dan folder hasil, lalu klik **CREATE CLIP**. Pantau **LOG PROSES**; klik **OPEN FOLDER** untuk membuka hasil.
+7. Atur subtitle, framing, dan folder hasil, lalu klik **CREATE CLIP**. Pantau **PROCESS LOG**; klik **OPEN FOLDER** untuk membuka hasil.
+8. Klik ikon YouTube untuk membuka antrean publikasi. Hasil render baru otomatis masuk dan tercentang. Untuk video lama, tambahkan MP4 lalu gunakan **IMPORT METADATA (.PY)**.
+9. Pilih video yang akan diunggah. Gunakan **AUTO-SCHEDULE** atau atur waktu tayang WIB manual, lalu klik **UPLOAD SCHEDULED VIDEOS**. Clipper mengunggah video sebagai Private dan mengirim waktu publish ke YouTube.
 
 Pada mode **Klip Pendek**, jumlah kandidat dimasukkan sebelum prompt dibuat. Setelah impor, pilih kandidat yang ingin dirender. Pada **Ringkas Video**, periksa urutan bagian yang dipertahankan dan narasi jika voice-over diaktifkan.
 
@@ -107,9 +113,9 @@ Voice-over hanya tersedia pada Ringkas Video. Pilih Edge-TTS atau Fish Audio di 
 
 Clipper98 tidak memanggil Gemini secara langsung dan tidak memerlukan API key Gemini. Pengguna memakai aplikasi Gemini untuk membuat manifest; Clipper98 kemudian mengunduh dan merender video di PC.
 
-### Apakah Clipper98 mengunggah video ke YouTube?
+### Bagaimana cara menjadwalkan dan mengunggah beberapa video?
 
-Tidak. Aplikasi membuat file video lokal dan menyediakan judul serta deskripsi untuk disalin ke YouTube Studio.
+Hubungkan channel melalui **CONNECT YOUTUBE**, pilih video di antrean, lalu klik **AUTO-SCHEDULE** atau atur waktu WIB per video. **UPLOAD SCHEDULED VIDEOS** mengirim file sebagai Private beserta waktu publish ke YouTube. Auto-Schedule memeriksa antrean lokal saja; antrean dari PC lain atau YouTube Studio tidak ikut dihitung.
 
 ### Mengapa ada unduhan besar saat pertama kali memakai Whisper?
 
@@ -146,7 +152,7 @@ Set-Location Clipper98
 Untuk membangun installer, jalankan dari PowerShell di root repo. Ganti nilai versi dengan versi yang akan dirilis:
 
 ```powershell
-.\Release-Clipper98.bat -Version "1.0.2"
+.\Release-Clipper98.bat -Version "1.0.3"
 ```
 
 Build menghasilkan file di `artifacts\publish`; installer dibuat di `artifacts\installer`. Folder `tools` dan model tidak disertakan dalam paket rilis. Untuk alur publikasi GitHub, workflow `.github/workflows/release.yml` membuat installer dan GitHub Release saat tag `v*` didorong.

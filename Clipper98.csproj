@@ -4,6 +4,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>assets\clipper98.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <NoWarn>$(NoWarn);CS9057</NoWarn>
@@ -11,6 +12,9 @@
     <RootNamespace>Clipper98</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Google.Apis.Auth" Version="1.78.0" />
+    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.78.0.4325" />
+    <Resource Include="assets\clipper98.ico" />
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20261107" ExcludeAssets="analyzers" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20261107" />
     <Content Include="SKILL.md" CopyToOutputDirectory="PreserveNewest" />

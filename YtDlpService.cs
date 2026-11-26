@@ -25,7 +25,7 @@ public sealed class YtDlpService
             ytdlp,
             ["--no-playlist", "--js-runtimes", "node", "--skip-download", "--dump-single-json", "--no-warnings", "--no-progress", url],
             cancellationToken: ct);
-        if (result.ExitCode != 0) throw new InvalidOperationException("Video tidak bisa dibaca. " + result.LastLine);
+        if (result.ExitCode != 0) throw new InvalidOperationException("Could not read the video. " + result.LastLine);
 
         using var document = JsonDocument.Parse(result.Output);
         var root = document.RootElement;
@@ -48,7 +48,7 @@ public sealed class YtDlpService
             ["--no-playlist", "--js-runtimes", "node", "--skip-download", "--dump-single-json", "--no-warnings", "--no-progress", url],
             workDir,
             cancellationToken: ct);
-        if (info.ExitCode != 0) throw new InvalidOperationException("Daftar subtitle YouTube tidak bisa dibaca. " + info.LastLine);
+        if (info.ExitCode != 0) throw new InvalidOperationException("Could not read the YouTube subtitle list. " + info.LastLine);
 
         using var document = JsonDocument.Parse(info.Output);
         var choice = ChooseSubtitle(document.RootElement, language);
@@ -66,7 +66,7 @@ public sealed class YtDlpService
             url
         };
         var result = await ProcessRunner.RunAsync(ytdlp, args, workDir, cancellationToken: ct);
-        if (result.ExitCode != 0) throw new InvalidOperationException("Subtitle YouTube gagal diunduh. " + result.LastLine);
+        if (result.ExitCode != 0) throw new InvalidOperationException("Could not download YouTube subtitles. " + result.LastLine);
 
         var subtitlePath = Directory.EnumerateFiles(workDir, "youtube-subtitles*.vtt").FirstOrDefault()
             ?? Directory.EnumerateFiles(workDir, "youtube-subtitles*.srt").FirstOrDefault();
@@ -151,21 +151,21 @@ public sealed class YtDlpService
         args.AddRange(["--merge-output-format", "mp4", "-o", destination, url]);
 
         var result = await ProcessRunner.RunAsync(ytdlp, args, workDir, line => HandleLine(line, sectionLength, report), ct);
-        if (result.ExitCode != 0) throw new InvalidOperationException("Klip gagal diunduh. " + result.Tail());
+        if (result.ExitCode != 0) throw new InvalidOperationException("Could not download the clip. " + result.Tail());
 
         var downloaded = File.Exists(destination) ? destination : Directory.EnumerateFiles(workDir, "*.mp4").FirstOrDefault()
-            ?? throw new InvalidOperationException("Video klip tidak ditemukan setelah unduhan.");
+            ?? throw new InvalidOperationException("The clip video could not be found after download.");
 
         // yt-dlp bisa selesai dengan kode 0 tetapi meninggalkan mp4 kosong (hanya header); klip nyata selalu jauh lebih besar.
         var size = new FileInfo(downloaded).Length;
         if (size < 20_000)
-            throw new InvalidOperationException($"Unduhan menghasilkan file kosong ({size} byte). Log yt-dlp: {result.Tail(8)}");
+            throw new InvalidOperationException($"The download produced an empty file ({size} bytes). yt-dlp log: {result.Tail(8)}");
         return downloaded;
     }
 
     private static void HandleLine(string line, double sectionLength, Action<JobProgress> report)
     {
-        const string message = "Mengunduh bagian video terpilih...";
+        const string message = "Downloading the selected video segment...";
 
         if (line.StartsWith("CLIPPER|", StringComparison.Ordinal))
         {

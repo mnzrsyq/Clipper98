@@ -1,6 +1,9 @@
 namespace Clipper98;
 
 using System.Text.Json.Serialization;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Globalization;
 
 public sealed class SubtitleCue
 {
@@ -157,6 +160,83 @@ public sealed class AppSettings
     public int TtsVolumePercent { get; set; } = 100;
     public int OriginalVolumePercent { get; set; } = 55;
     public int TtsPitchCents { get; set; }
+    public bool NightMode { get; set; }
+    public string YouTubeClientSecretsJson { get; set; } = string.Empty;
+    public List<YouTubeUploadItem> YouTubeUploadQueue { get; set; } = [];
+}
+
+public sealed class YouTubeUploadItem : INotifyPropertyChanged
+{
+    private bool _isSelected = true;
+    private string _title = string.Empty;
+    private string _description = string.Empty;
+    private DateTimeOffset? _publishAt;
+    private string _uploadStatus = "Queued";
+
+    public string FilePath { get; set; } = string.Empty;
+    public string ClipName { get; set; } = string.Empty;
+    public string YouTubeVideoId { get; set; } = string.Empty;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
+
+    public string Title
+    {
+        get => _title;
+        set => SetField(ref _title, value);
+    }
+
+    public string Description
+    {
+        get => _description;
+        set => SetField(ref _description, value);
+    }
+
+    public DateTimeOffset? PublishAt
+    {
+        get => _publishAt;
+        set
+        {
+            if (SetField(ref _publishAt, value))
+                OnPropertyChanged(nameof(PublishAtDisplay));
+        }
+    }
+
+    public string UploadStatus
+    {
+        get => _uploadStatus;
+        set => SetField(ref _uploadStatus, value);
+    }
+
+    [JsonIgnore]
+    public string FileName => Path.GetFileName(FilePath);
+
+    [JsonIgnore]
+    public int QueueNumber { get; set; }
+
+    [JsonIgnore]
+    public string PublishAtDisplay => PublishAt is { } publishAt
+        ? $"{publishAt.ToString("ddd, MMM d · h:mm tt", CultureInfo.GetCultureInfo("en-US"))} WIB"
+        : "Not scheduled";
+
+    [JsonIgnore]
+    public string FileState => File.Exists(FilePath) ? "Found" : "Missing";
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        OnPropertyChanged(propertyName);
+        return true;
+    }
+
+    private void OnPropertyChanged(string? propertyName) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
 
 public sealed class SubtitleStylePreset

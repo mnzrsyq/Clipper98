@@ -14,7 +14,7 @@ public static class ClipperJobScript
         var source = File.ReadAllText(path).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
         var assignment = Assignment.Match(source);
         if (!assignment.Success)
-            throw new InvalidOperationException("File tidak memakai format CLIPPER_JOB. Pastikan skill Clipper terbaru membuat manifest untuk Clipper98.");
+            throw new InvalidOperationException("This file does not use the CLIPPER_JOB format. Use the current Clipper skill to create a manifest for Clipper98.");
 
         var literal = source[assignment.Length..].Trim();
         try
@@ -26,7 +26,7 @@ public static class ClipperJobScript
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException("Isi CLIPPER_JOB bukan data Python sederhana yang valid. File tidak dijalankan. Buat ulang hasilnya dengan skill @clipper terbaru.", ex);
+            throw new InvalidOperationException("CLIPPER_JOB is not valid plain Python data. Clipper does not execute imported files. Recreate the manifest with the current @clipper skill.", ex);
         }
     }
 
@@ -66,33 +66,33 @@ public static class ClipperJobScript
     private static ClipperJobManifest ParseManifest(JsonElement root)
     {
         if (root.ValueKind != JsonValueKind.Object)
-            throw new JsonException("CLIPPER_JOB harus berupa object.");
+            throw new JsonException("CLIPPER_JOB must be an object.");
         var manifest = JsonSerializer.Deserialize<ClipperJobManifest>(root.GetRawText())
-            ?? throw new JsonException("Manifest kosong.");
-        if (manifest.SchemaVersion != 1) throw new InvalidOperationException($"Versi manifest {manifest.SchemaVersion} belum didukung.");
+            ?? throw new JsonException("The manifest is empty.");
+        if (manifest.SchemaVersion != 1) throw new InvalidOperationException($"Manifest version {manifest.SchemaVersion} is not supported.");
         if (manifest.Mode is null || manifest.KeepSegments is null || manifest.ClipsData is null)
-            throw new InvalidOperationException("Mode atau daftar bagian di manifest tidak valid.");
+            throw new InvalidOperationException("The manifest mode or segment list is invalid.");
         if (!string.Equals(manifest.Source.Platform, "youtube", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Sumber manifest harus video YouTube.");
+            throw new InvalidOperationException("The manifest source must be a YouTube video.");
         if (!IsYouTubeUrl(manifest.Source.Url))
-            throw new InvalidOperationException("URL YouTube di manifest tidak valid.");
+            throw new InvalidOperationException("The YouTube URL in the manifest is invalid.");
         if (manifest.Constraints.MaxHeight is < 1 or > 1080)
-            throw new InvalidOperationException("Resolusi manifest tidak boleh melebihi 1080p.");
+            throw new InvalidOperationException("Manifest resolution cannot exceed 1080p.");
         if (string.Equals(manifest.Mode, "condense", StringComparison.OrdinalIgnoreCase))
         {
             if (manifest.KeepSegments.Count is < 1 or > 100)
-                throw new InvalidOperationException("Video ringkas harus memiliki 1 sampai 100 bagian yang dipertahankan.");
+                throw new InvalidOperationException("A condensed video must contain 1 to 100 retained segments.");
             if (manifest.TargetDurationSeconds < 0)
-                throw new InvalidOperationException("Target durasi hasil tidak valid.");
+                throw new InvalidOperationException("The output duration target is invalid.");
         }
         else
         {
             if (!manifest.Mode.Equals("short_clips", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Mode manifest harus short_clips atau condense.");
+                throw new InvalidOperationException("The manifest mode must be short_clips or condense.");
             if (manifest.RequestedCandidateCount is < 1 or > 20)
-                throw new InvalidOperationException("Jumlah kandidat di manifest harus antara 1 dan 20.");
+                throw new InvalidOperationException("The manifest must request between 1 and 20 candidates.");
             if (manifest.ClipsData.Count is < 1 or > 20)
-                throw new InvalidOperationException("Manifest harus memiliki 1 sampai 20 kandidat.");
+                throw new InvalidOperationException("The manifest must contain 1 to 20 candidates.");
         }
         return manifest;
     }
@@ -114,15 +114,15 @@ public static class ClipperJobScript
                     || segment.NarrationOffsetSeconds < 0
                     || segment.NarrationOffsetSeconds > segment.EndSeconds - segment.StartSeconds
                     || (manifest.Source.DurationSeconds is > 0 and var sourceDuration && segment.EndSeconds > sourceDuration))
-                    throw new InvalidOperationException("Bagian video ringkas harus memiliki alasan, berurutan, tidak tumpang tindih, dan berada di dalam durasi video sumber.");
+                    throw new InvalidOperationException("Condensed video segments need a reason, must be ordered and non-overlapping, and must fall within the source video duration.");
                 previousEnd = segment.EndSeconds;
             }
 
             var keptDuration = orderedSegments.Sum(segment => segment.DurationSeconds);
             if (manifest.YouTubeTitle?.Length > 100)
-                throw new InvalidOperationException("Judul YouTube di manifest maksimal 100 karakter.");
+                throw new InvalidOperationException("YouTube titles in the manifest cannot exceed 100 characters.");
             if (manifest.YouTubeDescription?.Length > 5000)
-                throw new InvalidOperationException("Deskripsi YouTube di manifest maksimal 5.000 karakter.");
+                throw new InvalidOperationException("YouTube descriptions in the manifest cannot exceed 5,000 characters.");
             var lead = orderedSegments[0].StartSeconds;
             var tail = orderedSegments[^1].EndSeconds;
             return
@@ -132,8 +132,8 @@ public static class ClipperJobScript
                     Name = "video_ringkas",
                     Start = lead,
                     End = tail,
-                    Hook = string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "Video ringkas" : manifest.CondensedSummary,
-                    Reason = $"{orderedSegments.Count} bagian dipertahankan · hasil sekitar {TimeSpan.FromSeconds(keptDuration):hh\\:mm\\:ss}",
+                    Hook = string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "Condensed video" : manifest.CondensedSummary,
+                    Reason = $"{orderedSegments.Count} segments retained · output about {TimeSpan.FromSeconds(keptDuration):hh\\:mm\\:ss}",
                     KeptSegments = orderedSegments,
                     YouTubeTitle = manifest.YouTubeTitle ?? string.Empty,
                     YouTubeDescription = manifest.YouTubeDescription ?? string.Empty
@@ -146,11 +146,11 @@ public static class ClipperJobScript
         foreach (var item in manifest.ClipsData)
         {
             if (!Regex.IsMatch(item.Id, @"^(?:clip|custom)_\d{2}$", RegexOptions.IgnoreCase) || !ids.Add(item.Id))
-                throw new InvalidOperationException("ID kandidat harus unik dan memakai pola clip_01 atau custom_01.");
+                throw new InvalidOperationException("Candidate IDs must be unique and follow the clip_01 or custom_01 format.");
             if (!double.IsFinite(item.StartSeconds) || !double.IsFinite(item.EndSeconds)
                 || item.StartSeconds < 0 || item.EndSeconds <= item.StartSeconds
                 || (manifest.Source.DurationSeconds is > 0 and var duration && item.EndSeconds > duration))
-                throw new InvalidOperationException($"Timestamp kandidat {item.Id} tidak valid atau berada di luar durasi video.");
+                throw new InvalidOperationException($"Candidate {item.Id} has invalid timestamps or falls outside the video duration.");
 
             clips.Add(new ClipCandidate
             {
@@ -170,7 +170,7 @@ public static class ClipperJobScript
         for (var i = 0; i < clips.Count; i++)
             for (var j = i + 1; j < clips.Count; j++)
                 if (clips[i].Start < clips[j].End && clips[j].Start < clips[i].End)
-                    throw new InvalidOperationException($"Kandidat {clips[i].Name} dan {clips[j].Name} bertumpang tindih.");
+                    throw new InvalidOperationException($"Candidates {clips[i].Name} and {clips[j].Name} overlap.");
 
         return clips;
     }

@@ -45,3 +45,13 @@ Voice-over tersedia pada **Ringkas Video**. Di **PENGATURAN SUARA**, pilih Fish 
 3. Untuk update, jalankan installer terbaru di PC yang sama. Pengaturan, cache, tools, dan model yang sudah diunduh tetap tersimpan.
 
 Pada penggunaan pertama, buka **SETUP** lalu pilih **UNDUH KOMPONEN KURANG**. Clipper98 mengunduh komponen yang diperlukan ke PC. Model Whisper Large-v3-Turbo sekitar 1,5 GiB dan hanya diunduh jika belum tersedia serta diperlukan.
+
+## Upload dan jadwalkan di YouTube
+
+1. Siapkan OAuth client JSON bertipe **Desktop app** dari Google Cloud dengan YouTube Data API v3 aktif. Tambahkan akun channel sebagai test user jika project masih berstatus **Testing**.
+2. Klik ikon YouTube di Clipper98, pilih **CONNECT YOUTUBE**, lalu pilih file JSON. Masuk ke Google dengan akun yang mengelola channel.
+3. Hasil render baru otomatis masuk ke publication queue dengan metadata dari manifest. Untuk render lama, klik **ADD VIDEOS**, lalu **IMPORT METADATA (.PY)** untuk mengisi judul dan deskripsi dari manifest yang sesuai.
+4. Centang video yang akan diproses. Klik **AUTO-SCHEDULE** untuk mengisi slot WIB yang tersedia, atau pilih satu baris dan atur waktu publish manual.
+5. Klik **UPLOAD SCHEDULED VIDEOS**. Video dikirim sebagai Private dengan waktu tayang terjadwal; audience default-nya **Not Made for Kids**.
+
+Status jadwal hanya disimpan dalam antrean lokal di PC ini. Auto-Schedule tidak membaca jadwal yang dibuat dari PC lain atau YouTube Studio.

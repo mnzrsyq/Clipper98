@@ -7,22 +7,73 @@
     <SolidColorBrush x:Key="TitleBrush" Color="#000080" />
     <SolidColorBrush x:Key="FocusBrush" Color="#0066CC" />
     <SolidColorBrush x:Key="AccentBrush" Color="#D19B00" />
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#111111" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#B42318" />
+    <SolidColorBrush x:Key="TextBrush" Color="#111111" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#454545" />
+    <SolidColorBrush x:Key="InputBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="InputTextBrush" Color="#111111" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#808080" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#E8E8E8" />
+    <SolidColorBrush x:Key="PressedBrush" Color="#9D9D9D" />
+    <SolidColorBrush x:Key="SelectedBrush" Color="#D6D3CE" />
+
+    <DrawingImage x:Key="ClapperboardIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#202020" Geometry="M 3,9 H 29 V 28 H 3 Z" />
+          <GeometryDrawing Brush="#5B5B5B" Geometry="M 3,8 L 6,3 H 30 L 27,8 Z" />
+          <GeometryDrawing Brush="#ECE9D8" Geometry="M 8,4 H 12 L 10,8 H 6 Z M 17,4 H 21 L 19,8 H 15 Z M 26,4 H 29 L 27,8 H 24 Z" />
+          <GeometryDrawing Brush="#B0B0B0" Geometry="M 6,12 H 26 V 14 H 6 Z M 6,24 H 26 V 26 H 6 Z" />
+          <GeometryDrawing Brush="#FFFFFF" Geometry="M 4,10 H 28 V 11 H 4 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <DrawingImage x:Key="YouTubeIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#7A0000" Geometry="M 5,7 H 27 V 25 H 5 Z" />
+          <GeometryDrawing Brush="#E62117" Geometry="M 7,5 H 25 V 7 H 27 V 9 H 29 V 23 H 27 V 25 H 25 V 27 H 7 V 25 H 5 V 23 H 3 V 9 H 5 V 7 H 7 Z" />
+          <GeometryDrawing Brush="#FFFFFF" Geometry="M 12,10 L 22,16 L 12,22 Z" />
+          <GeometryDrawing Brush="#FF8A80" Geometry="M 7,7 H 12 V 8 H 7 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <Style x:Key="ModeIconButtonStyle" TargetType="ToggleButton">
+      <Setter Property="Width" Value="42" />
+      <Setter Property="Height" Value="34" />
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+      <Setter Property="Background" Value="{DynamicResource FaceBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Focusable" Value="True" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger>
+        <Trigger Property="IsChecked" Value="True"><Setter Property="Background" Value="{DynamicResource SelectedBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource TitleBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" /><Setter Property="Background" Value="{DynamicResource FaceBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="Cursor" Value="No" /></Trigger>
+      </Style.Triggers>
+    </Style>
 
     <Style TargetType="Button">
       <Setter Property="FontFamily" Value="Tahoma" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Padding" Value="10,4" />
       <Setter Property="MinHeight" Value="28" />
-      <Setter Property="Background" Value="{StaticResource FaceBrush}" />
-      <Setter Property="BorderBrush" Value="#404040" />
+      <Setter Property="Background" Value="{DynamicResource FaceBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Focusable" Value="True" />
       <Setter Property="Cursor" Value="Hand" />
       <Style.Triggers>
-        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#E8E8E8" /></Trigger>
-        <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="#9D9D9D" /></Trigger>
-        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#777777" /><Setter Property="Cursor" Value="No" /></Trigger>
-        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger>
+        <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="{DynamicResource PressedBrush}" /></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" /><Setter Property="Cursor" Value="No" /></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
       </Style.Triggers>
     </Style>
 
@@ -30,12 +81,13 @@
       <Setter Property="FontFamily" Value="Tahoma" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Padding" Value="6,4" />
-      <Setter Property="Background" Value="White" />
-      <Setter Property="BorderBrush" Value="#606060" />
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="MinHeight" Value="29" />
       <Style.Triggers>
-        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
       </Style.Triggers>
     </Style>
 
@@ -44,12 +96,14 @@
       <Setter Property="FontSize" Value="12" />
       <Setter Property="MinHeight" Value="29" />
       <Setter Property="Padding" Value="4,2" />
-      <Setter Property="BorderBrush" Value="#606060" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Cursor" Value="Hand" />
       <Style.Triggers>
-        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
-        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#777777" /><Setter Property="Cursor" Value="No" /></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" /><Setter Property="Background" Value="{DynamicResource FaceBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="Cursor" Value="No" /></Trigger>
       </Style.Triggers>
     </Style>
 
@@ -57,19 +111,21 @@
       <Setter Property="FontFamily" Value="Tahoma" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Padding" Value="6,4" />
-      <Setter Property="Background" Value="White" />
-      <Setter Property="BorderBrush" Value="#606060" />
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="MinHeight" Value="29" />
       <Style.Triggers>
-        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
-        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#777777" /><Setter Property="Cursor" Value="No" /></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" /><Setter Property="BorderThickness" Value="2" /></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" /><Setter Property="Cursor" Value="No" /></Trigger>
       </Style.Triggers>
     </Style>
 
     <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
       <Setter Property="Cursor" Value="Hand" />
-      <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Cursor" Value="No" /><Setter Property="Foreground" Value="#777777" /></Trigger></Style.Triggers>
+      <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Cursor" Value="No" /><Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" /></Trigger></Style.Triggers>
     </Style>
 
     <Style TargetType="GroupBox">
@@ -77,8 +133,74 @@
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Margin" Value="0" />
       <Setter Property="Padding" Value="10,8,10,10" />
-      <Setter Property="BorderBrush" Value="#808080" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style TargetType="DatePicker">
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    </Style>
+
+    <Style TargetType="DatePickerTextBox">
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Background" Value="{DynamicResource FaceBrush}" />
+          <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Calendar">
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    </Style>
+
+    <Style TargetType="DataGrid">
+      <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="RowBackground" Value="{DynamicResource WindowBrush}" />
+      <Setter Property="AlternatingRowBackground" Value="{DynamicResource FaceBrush}" />
+      <Setter Property="AlternationCount" Value="2" />
+      <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource BorderBrush}" />
+    </Style>
+
+    <Style TargetType="DataGridColumnHeader">
+      <Setter Property="Background" Value="{DynamicResource FaceBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style TargetType="DataGridCell">
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Setter Property="Padding" Value="4,3" />
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="{DynamicResource TitleBrush}" />
+          <Setter Property="Foreground" Value="White" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style TargetType="DataGridRow">
+      <Setter Property="Background" Value="{DynamicResource WindowBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InputTextBrush}" />
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="{DynamicResource TitleBrush}" />
+          <Setter Property="Foreground" Value="White" />
+        </Trigger>
+      </Style.Triggers>
     </Style>
   </Application.Resources>
 </Application>

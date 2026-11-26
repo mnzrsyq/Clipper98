@@ -5,22 +5,35 @@ namespace Clipper98;
 public partial class SetupWindow : Window
 {
     private readonly IReadOnlyList<string> _missingComponents;
+    private readonly AppSettings _settings;
     private readonly ComponentDownloadService _downloadService = new();
     private CancellationTokenSource? _downloadCancellation;
+    private bool _themeReady;
 
-    public SetupWindow(string report, IReadOnlyList<string> missingComponents)
+    public SetupWindow(string report, IReadOnlyList<string> missingComponents, AppSettings settings)
     {
         InitializeComponent();
         _missingComponents = missingComponents;
+        _settings = settings;
+        NightModeCheckBox.IsChecked = settings.NightMode;
+        _themeReady = true;
         ChecksBox.Text = report;
         DownloadMissingButton.Content = missingComponents.Count == 0
-            ? "SEMUA KOMPONEN TERSEDIA"
-            : $"UNDUH KOMPONEN KURANG ({missingComponents.Count})";
+            ? "ALL COMPONENTS AVAILABLE"
+            : $"DOWNLOAD MISSING COMPONENTS ({missingComponents.Count})";
         DownloadMissingButton.IsEnabled = missingComponents.Count > 0;
         DownloadStatusText.Text = missingComponents.Count == 0
-            ? "Semua komponen yang dapat diunduh sudah tersedia."
-            : "Komponen yang belum ada bisa diunduh ke folder tools. Model Whisper Large-v3-Turbo berukuran sekitar 1,5 GiB.";
+            ? "All downloadable components are available."
+            : "Missing components can be downloaded to the tools folder. The Whisper Large-v3-Turbo model is about 1.5 GiB.";
         RefreshStorageSummary();
+    }
+
+    private void NightMode_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_themeReady) return;
+        _settings.NightMode = NightModeCheckBox.IsChecked == true;
+        SettingsStore.Save(_settings);
+        ThemeManager.Apply(_settings.NightMode);
     }
 
     private async void DownloadMissingButton_Click(object sender, RoutedEventArgs e)
@@ -34,11 +47,11 @@ public partial class SetupWindow : Window
         CancelDownloadButton.Visibility = Visibility.Visible;
         DownloadProgressBar.Visibility = Visibility.Visible;
         DownloadProgressBar.IsIndeterminate = true;
-        DownloadStatusText.Text = "Menyiapkan unduhan komponen...";
+        DownloadStatusText.Text = "Preparing component download...";
         var progress = new Progress<ComponentDownloadProgress>(update =>
         {
             if (!IsLoaded || cancellationToken.IsCancellationRequested || _downloadCancellation?.Token != cancellationToken) return;
-            DownloadStatusText.Text = $"Mengunduh {update.Component}: {update.Detail}";
+            DownloadStatusText.Text = $"Downloading {update.Component}: {update.Detail}";
             if (update.Percent is { } percent)
             {
                 DownloadProgressBar.IsIndeterminate = false;
@@ -49,17 +62,17 @@ public partial class SetupWindow : Window
         try
         {
             await _downloadService.DownloadMissingAsync(_missingComponents, progress, cancellationToken);
-            DownloadStatusText.Text = "Komponen berhasil diunduh. Semua siap digunakan.";
+            DownloadStatusText.Text = "Components downloaded. Everything is ready.";
             DownloadProgressBar.IsIndeterminate = false;
             DownloadProgressBar.Value = 100;
         }
         catch (OperationCanceledException)
         {
-            DownloadStatusText.Text = "Unduhan dibatalkan. Komponen yang sudah selesai tetap tersimpan.";
+            DownloadStatusText.Text = "Download canceled. Completed components remain available.";
         }
         catch (Exception ex)
         {
-            DownloadStatusText.Text = "Unduhan gagal: " + ex.Message;
+            DownloadStatusText.Text = "Download failed: " + ex.Message;
         }
         finally
         {
@@ -71,7 +84,7 @@ public partial class SetupWindow : Window
             UpdateComponentCheckRows();
             CancelDownloadButton.Visibility = Visibility.Collapsed;
             var remaining = _missingComponents.Any(IsComponentMissing);
-            DownloadMissingButton.Content = remaining ? "UNDUH LAGI KOMPONEN YANG KURANG" : "SEMUA KOMPONEN TERSEDIA";
+            DownloadMissingButton.Content = remaining ? "DOWNLOAD MISSING COMPONENTS AGAIN" : "ALL COMPONENTS AVAILABLE";
             DownloadMissingButton.IsEnabled = remaining;
             ClearTempButton.IsEnabled = TempCacheService.GetSummary().Bytes > 0;
             CloseButton.Visibility = Visibility.Visible;
@@ -83,11 +96,11 @@ public partial class SetupWindow : Window
         var statuses = new Dictionary<string, bool>(StringComparer.Ordinal)
         {
             ["yt-dlp.exe"] = ProcessRunner.FindTool("yt-dlp") is not null,
-            ["Node.js untuk YouTube"] = ProcessRunner.FindTool("node") is not null || ProcessRunner.FindCommand("node") is not null,
+            ["Node.js for YouTube"] = ProcessRunner.FindTool("node") is not null || ProcessRunner.FindCommand("node") is not null,
             ["ffmpeg.exe"] = ProcessRunner.FindTool("ffmpeg") is not null,
             ["whisper-cli.exe"] = ProcessRunner.FindTool("whisper-cli") is not null,
             ["Whisper Large-v3-Turbo"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "ggml-large-v3-turbo.bin")),
-            ["Model face detection"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml"))
+            ["Face detection model"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml"))
         };
         ChecksBox.Text = string.Join(Environment.NewLine, ChecksBox.Text.Split(Environment.NewLine)
             .Select(line =>
@@ -96,7 +109,7 @@ public partial class SetupWindow : Window
                 if (separator < 0) return line;
                 var name = line[..separator];
                 return statuses.TryGetValue(name, out var exists)
-                    ? $"{name}: {(exists ? "OK" : "belum ada")}"
+                    ? $"{name}: {(exists ? "OK" : "Missing")}"
                     : line;
             }));
     }
@@ -104,11 +117,11 @@ public partial class SetupWindow : Window
     private bool IsComponentMissing(string component) => component switch
     {
         "yt-dlp.exe" => ProcessRunner.FindTool("yt-dlp") is null,
-        "Node.js untuk YouTube" => ProcessRunner.FindTool("node") is null && ProcessRunner.FindCommand("node") is null,
+        "Node.js for YouTube" => ProcessRunner.FindTool("node") is null && ProcessRunner.FindCommand("node") is null,
         "ffmpeg.exe" => ProcessRunner.FindTool("ffmpeg") is null,
         "whisper-cli.exe" => ProcessRunner.FindTool("whisper-cli") is null,
         "Whisper Large-v3-Turbo" => !File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "ggml-large-v3-turbo.bin")),
-        "Model face detection" => !File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml")),
+        "Face detection model" => !File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml")),
         _ => false
     };
 
@@ -118,22 +131,22 @@ public partial class SetupWindow : Window
         {
             var result = TempCacheService.Clear();
             CleanupStatusText.Text = result.RemovedBytes == 0
-                ? "Tidak ada file temp yang bisa dihapus."
-                : $"Dihapus {FormatBytes(result.RemovedBytes)} · {result.RemovedFiles} file · {result.RemovedFolders} folder.";
+                ? "There are no temporary files to remove."
+                : $"Removed {FormatBytes(result.RemovedBytes)} · {result.RemovedFiles} files · {result.RemovedFolders} folders.";
             if (result.SkippedFolders > 0)
-                CleanupStatusText.Text += $" {result.SkippedFolders} folder aktif/terlindungi dilewati.";
+                CleanupStatusText.Text += $" Skipped {result.SkippedFolders} active or protected folders.";
             RefreshStorageSummary();
         }
         catch (Exception ex)
         {
-            CleanupStatusText.Text = "Pembersihan gagal: " + ex.Message;
+            CleanupStatusText.Text = "Cleanup failed: " + ex.Message;
         }
     }
 
     private void RefreshStorageSummary()
     {
         var summary = TempCacheService.GetSummary();
-        StorageSummaryText.Text = $"Terpakai {summary.FormattedSize} · {summary.Files} file · {summary.Folders} folder";
+        StorageSummaryText.Text = $"{summary.FormattedSize} used · {summary.Files} files · {summary.Folders} folders";
         ClearTempButton.IsEnabled = summary.Bytes > 0;
     }
 

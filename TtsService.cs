@@ -26,7 +26,7 @@ public sealed class TtsService
     public async Task<string> GenerateAsync(string text, TtsOptions options, IProgress<JobProgress> progress, CancellationToken ct)
     {
         text = text.Trim();
-        if (text.Length == 0) throw new InvalidOperationException("Teks narasi kosong.");
+        if (text.Length == 0) throw new InvalidOperationException("Narration text is empty.");
         var provider = options.Provider.Equals("edge", StringComparison.OrdinalIgnoreCase) ? "edge" : "fish";
         var keyMaterial = string.Join('|', provider, options.Voice, options.RatePercent, text);
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(keyMaterial))).ToLowerInvariant();
@@ -34,7 +34,7 @@ public sealed class TtsService
         var cached = Path.Combine(CacheRoot, key + extension);
         if (IsValidAudio(cached))
         {
-            progress.Report(JobProgress.Stage("Cache narasi cocok; melewati pembuatan suara."));
+            progress.Report(JobProgress.Stage("Narration cache found. Skipping voice generation."));
             return cached;
         }
 
@@ -52,7 +52,7 @@ public sealed class TtsService
                 var textFile = Path.Combine(temporaryDir, "narration.txt");
                 await File.WriteAllTextAsync(textFile, text, new UTF8Encoding(false), ct);
                 var resultFile = Path.Combine(temporaryDir, "narration.mp3");
-                progress.Report(JobProgress.Stage("Membuat narasi melalui edge-TTS (butuh koneksi internet)..."));
+                progress.Report(JobProgress.Stage("Generating narration with Edge TTS (internet connection required)..."));
                 await RunAsync(envPython,
                 ["-m", "edge_tts", "--file", textFile, "--voice", NormalizeEdgeVoice(options.Voice),
                  $"--rate={FormatEdgeRate(options.RatePercent)}", "--write-media", resultFile], temporaryDir, ct);
@@ -77,7 +77,7 @@ public sealed class TtsService
             Directory.CreateDirectory(Path.GetDirectoryName(UvPath)!);
             if (!File.Exists(UvPath))
             {
-                progress.Report(JobProgress.Stage("Mengunduh uv untuk menyiapkan runtime TTS lokal..."));
+                progress.Report(JobProgress.Stage("Downloading uv to prepare the local text-to-speech runtime..."));
                 var archive = Path.Combine(Path.GetTempPath(), $"clipper-uv-{Guid.NewGuid():N}.zip");
                 try
                 {
@@ -85,7 +85,7 @@ public sealed class TtsService
                     using var zip = ZipFile.OpenRead(archive);
                     var entry = zip.Entries.FirstOrDefault(x => x.FullName.EndsWith("/uv.exe", StringComparison.OrdinalIgnoreCase)
                         || x.FullName.Equals("uv.exe", StringComparison.OrdinalIgnoreCase))
-                        ?? throw new InvalidDataException("Unduhan uv tidak berisi uv.exe.");
+                        ?? throw new InvalidDataException("The uv download did not contain uv.exe.");
                     Directory.CreateDirectory(Path.GetDirectoryName(UvPath)!);
                     await using var input = entry.Open();
                     await using var output = new FileStream(UvPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
@@ -93,10 +93,10 @@ public sealed class TtsService
                 }
                 finally { TryDelete(archive); }
             }
-            progress.Report(JobProgress.Stage("Mengunduh Python 3.11 khusus TTS..."));
+            progress.Report(JobProgress.Stage("Downloading Python 3.11 for text-to-speech..."));
             await RunAsync(UvPath, ["python", "install", "3.11", "--install-dir", PythonInstall], Root, ct);
             python = Directory.EnumerateFiles(PythonInstall, "python.exe", SearchOption.AllDirectories).FirstOrDefault()
-                ?? throw new InvalidOperationException("Runtime Python untuk TTS tidak ditemukan setelah unduhan.");
+                ?? throw new InvalidOperationException("The Python runtime for text-to-speech was not found after download.");
             return python;
         }
         finally { SetupLock.Release(); }
@@ -115,10 +115,10 @@ public sealed class TtsService
             Directory.CreateDirectory(Path.GetDirectoryName(env)!);
             if (!File.Exists(envPython))
             {
-                progress.Report(JobProgress.Stage("Menyiapkan lingkungan Python TTS terpisah..."));
+                progress.Report(JobProgress.Stage("Preparing the isolated Python environment for text-to-speech..."));
                 await RunAsync(UvPath, ["venv", "--python", python, env], Root, ct);
             }
-            progress.Report(JobProgress.Stage($"Mengunduh dan memasang {package}..."));
+            progress.Report(JobProgress.Stage($"Downloading and installing {package}..."));
             await RunAsync(UvPath, ["pip", "install", "--python", envPython, "--index-url", "https://pypi.org/simple", package], Root, ct);
             File.WriteAllText(marker, "ok");
         }
@@ -130,9 +130,9 @@ public sealed class TtsService
     {
         var apiKey = SettingsStore.Load().FishApiKey.Trim();
         if (apiKey.Length == 0)
-            throw new InvalidOperationException("API key Fish Audio belum diisi. Buka Pengaturan Suara, pilih Fish Audio, lalu tempel API key.");
+            throw new InvalidOperationException("The Fish Audio API key is missing. Open Voice Settings, select Fish Audio, and enter the key.");
 
-        progress.Report(JobProgress.Stage("Membuat narasi melalui Fish Audio S2.1 Pro Free..."));
+        progress.Report(JobProgress.Stage("Generating narration with Fish Audio S2.1 Pro Free..."));
         var speed = Math.Clamp(1d + options.RatePercent / 100d, 0.5d, 2d);
         var voiceId = options.Voice == "budi" ? BudiVoiceId : options.Voice;
         var payload = JsonSerializer.Serialize(new
@@ -153,10 +153,10 @@ public sealed class TtsService
             if (detail.Length > 1200) detail = detail[..1200];
             var message = response.StatusCode switch
             {
-                System.Net.HttpStatusCode.Unauthorized => "API key Fish Audio ditolak (401). Periksa key yang disimpan di pengaturan suara.",
+                System.Net.HttpStatusCode.Unauthorized => "Fish Audio rejected the API key (401). Check the key saved in Voice Settings.",
                 System.Net.HttpStatusCode.PaymentRequired => "Fish Audio menolak model gratis (402). Pastikan header model S2.1 Pro Free tersedia untuk akun API ini.",
-                (System.Net.HttpStatusCode)429 => "Fish Audio sedang membatasi permintaan (429). Coba lagi beberapa saat.",
-                _ => $"Fish Audio gagal ({(int)response.StatusCode}): {detail}"
+                (System.Net.HttpStatusCode)429 => "Fish Audio rate-limited the request (429). Try again in a few minutes.",
+                _ => $"Fish Audio request failed ({(int)response.StatusCode}): {detail}"
             };
             throw new InvalidOperationException(message);
         }
@@ -238,7 +238,7 @@ public sealed class TtsService
 
     private static void EnsureGeneratedAudio(string path)
     {
-        if (!IsValidAudio(path)) throw new InvalidOperationException("File audio TTS kosong atau gagal dibuat.");
+        if (!IsValidAudio(path)) throw new InvalidOperationException("The text-to-speech audio file is empty or could not be created.");
     }
 
     private static HttpClient CreateClient()

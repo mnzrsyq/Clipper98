@@ -41,18 +41,18 @@ public sealed class ClipPipeline
             }
             else
             {
-                progress.Report(JobProgress.Stage("Mengunduh bagian video terpilih..."));
+                progress.Report(JobProgress.Stage("Downloading selected video segments..."));
                 source = await _ytDlp.DownloadSectionAsync(
                     url, clip.Start, clip.End, Path.Combine(job, "source.mp4"), job, p => progress.Report(p), ct);
                 try
                 {
                     _cache.StoreVideo(source, cachedVideo);
                     source = cachedVideo;
-                    progress.Report(JobProgress.Stage("Segmen video disimpan ke cache lokal."));
+                    progress.Report(JobProgress.Stage("Video segments saved to the local cache."));
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    progress.Report(JobProgress.Stage("Cache video gagal disimpan; render tetap dilanjutkan."));
+                    progress.Report(JobProgress.Stage("Could not save video segments to the cache. Rendering will continue."));
                 }
             }
         }
@@ -62,19 +62,19 @@ public sealed class ClipPipeline
         if (useNarration)
         {
             if (clip.KeptSegments.Count == 0)
-                throw new InvalidOperationException("Narasi VO hanya tersedia untuk mode video ringkas.");
-            progress.Report(JobProgress.Stage("Menyiapkan narasi untuk potongan video..."));
+                throw new InvalidOperationException("Voice-over narration is only available in Condense Video mode.");
+            progress.Report(JobProgress.Stage("Preparing narration for the video segments..."));
             var cursor = 0d;
             var previousVoiceEnd = 0d;
             foreach (var segment in clip.KeptSegments)
             {
                 ct.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(segment.Narration))
-                    throw new InvalidOperationException("Ada bagian tanpa teks narasi. Perbarui manifest Gemini atau matikan opsi narasi.");
+                    throw new InvalidOperationException("A segment has no narration text. Update the Gemini manifest or turn off narration.");
                 var audio = await _tts.GenerateAsync(segment.Narration, ttsOptions, progress, ct);
                 var media = await MediaProbe.ProbeAsync(audio, ct);
                 if (media.DurationSeconds is not > 0)
-                    throw new InvalidOperationException("Durasi audio narasi tidak dapat dibaca.");
+                    throw new InvalidOperationException("Could not read the narration audio duration.");
                 var offset = Math.Clamp(segment.NarrationOffsetSeconds, 0, Math.Max(0, segment.DurationSeconds));
                 var start = cursor + offset;
                 if (start < previousVoiceEnd) start = previousVoiceEnd + 0.12;
@@ -100,20 +100,20 @@ public sealed class ClipPipeline
         var hasTranscriptCache = useSubtitles && !useNarration && _cache.TryGetTranscript(transcriptCache, out cues);
         if (!useSubtitles)
         {
-            progress.Report(JobProgress.Stage("Subtitle dilewati sesuai pilihan."));
+            progress.Report(JobProgress.Stage("Subtitles skipped as requested."));
         }
         else if (useNarration)
         {
             cues = narrationCues;
-            progress.Report(JobProgress.Stage("Memakai subtitle dari teks narasi Gemini agar sesuai dengan VO."));
+            progress.Report(JobProgress.Stage("Using subtitles from the Gemini narration to match the voice-over."));
         }
         else if (hasTranscriptCache)
         {
-            progress.Report(JobProgress.Stage("Cache transkrip cocok; melewati pengambilan subtitle dan transkripsi."));
+            progress.Report(JobProgress.Stage("Transcript cache found. Skipping subtitle download and transcription."));
         }
         else if (!isCondensed && subtitleSource.Equals("auto", StringComparison.OrdinalIgnoreCase))
         {
-            progress.Report(JobProgress.Stage("Mencari subtitle YouTube..."));
+            progress.Report(JobProgress.Stage("Looking for YouTube subtitles..."));
             try
             {
                 var subtitle = await _ytDlp.DownloadSubtitleAsync(url, language, job, ct);
@@ -123,12 +123,12 @@ public sealed class ClipPipeline
                     cues = SubtitleParser.TrimToRange(sourceCues, clip.Start, clip.End);
                     if (cues.Count > 0)
                     {
-                        var sourceType = subtitle.IsAutomatic ? "otomatis" : "manual";
-                        progress.Report(JobProgress.Stage($"Memakai subtitle YouTube {subtitle.Language} ({sourceType})."));
+                        var sourceType = subtitle.IsAutomatic ? "automatic" : "manual";
+                        progress.Report(JobProgress.Stage($"Using {sourceType} YouTube subtitles ({subtitle.Language})."));
                     }
-                    else subtitleProblem = "Subtitle YouTube tidak berisi teks pada rentang klip ini.";
+                    else subtitleProblem = "YouTube subtitles contain no text in this clip range.";
                 }
-                else subtitleProblem = "Subtitle YouTube untuk bahasa yang dipilih tidak tersedia.";
+                else subtitleProblem = "YouTube subtitles are unavailable in the selected language.";
             }
             catch (OperationCanceledException)
             {
@@ -136,15 +136,15 @@ public sealed class ClipPipeline
             }
             catch (Exception ex)
             {
-                subtitleProblem = "Subtitle YouTube gagal diambil: " + ex.Message;
+                subtitleProblem = "Could not retrieve YouTube subtitles: " + ex.Message;
             }
         }
 
         if (useSubtitles && !useNarration && cues.Count == 0)
         {
             var message = subtitleSource.Equals("whisper", StringComparison.OrdinalIgnoreCase)
-                ? "Memakai Whisper Large-v3-Turbo untuk transkrip lokal..."
-                : $"{subtitleProblem ?? "Subtitle YouTube tidak tersedia."} Melanjutkan dengan Whisper Large-v3-Turbo...";
+                ? "Using Whisper Large-v3-Turbo for local transcription..."
+                : $"{subtitleProblem ?? "YouTube subtitles are unavailable."} Continuing with Whisper Large-v3-Turbo...";
             progress.Report(JobProgress.Stage(message));
             cues = await _whisper.TranscribeAsync(source, language, job, ct);
         }
@@ -153,7 +153,7 @@ public sealed class ClipPipeline
         {
             try { _cache.StoreTranscript(transcriptCache, cues); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            { progress.Report(JobProgress.Stage("Cache transkrip gagal disimpan; render tetap dilanjutkan.")); }
+            { progress.Report(JobProgress.Stage("Could not save the transcript cache. Rendering will continue.")); }
         }
 
         string? assFile = null;
@@ -167,35 +167,35 @@ public sealed class ClipPipeline
         IReadOnlyList<SmartCropSegment> fullFrameSegments = [];
         if (useFourByFiveContentFrame && !clip.PreserveFullFrame)
         {
-            progress.Report(JobProgress.Stage("Menganalisis wajah untuk crop utama 4:5..."));
+            progress.Report(JobProgress.Stage("Analyzing faces for the main 4:5 crop..."));
             var analysis = await AnalyzeFramingCachedAsync(source, job, ct, cropHeight: 1350);
             cropExpression = analysis.CropExpression;
             fullFrameSegments = analysis.FullFrameSegments;
             progress.Report(JobProgress.Stage(!analysis.IsAvailable
-                ? "Analisis wajah tidak tersedia; area 4:5 memakai crop tengah."
+                ? "Face analysis is unavailable. The 4:5 area will use a centered crop."
                 : !analysis.HasDetectedFace
-                    ? "Wajah tidak terdeteksi; gambar penuh akan tampil di area 4:5 dengan latar blur."
-                    : "Wajah utama terlacak di area crop 4:5."));
+                    ? "No face was detected. The full image will appear in the 4:5 area over a blurred background."
+                    : "The main face is tracked in the 4:5 crop area."));
         }
         else if (!preserveSourceAspectRatio && !useFourByFiveContentFrame && !clip.PreserveFullFrame)
         {
-            progress.Report(JobProgress.Stage("Menganalisis wajah untuk smart crop..."));
+            progress.Report(JobProgress.Stage("Analyzing faces for Smart Crop..."));
             var analysis = await AnalyzeFramingCachedAsync(source, job, ct, cropHeight: 1920);
             cropExpression = analysis.CropExpression;
             fullFrameSegments = analysis.FullFrameSegments;
             var fallbackSummary = fullFrameSegments.Count == 0
                 ? string.Empty
-                : $" {fullFrameSegments.Count} rentang tanpa wajah akan memakai video utuh dengan latar blur.";
+                : $" {fullFrameSegments.Count} segments without a detected face will show the full video over a blurred background.";
             progress.Report(JobProgress.Stage(!analysis.IsAvailable
-                ? "Analisis wajah tidak tersedia; memakai crop tengah sebagai cadangan."
+                ? "Face analysis is unavailable. Using a centered crop as a fallback."
                 : !analysis.HasDetectedFace
-                    ? "Wajah tidak terdeteksi; seluruh klip memakai video utuh dengan latar blur."
-                    : $"Wajah utama terlacak; smart crop aktif.{fallbackSummary}"));
+                    ? "No face was detected. The full clip will appear over a blurred background."
+                    : $"The main face is tracked. Smart Crop is active.{fallbackSummary}"));
         }
 
         progress.Report(JobProgress.Stage(preserveSourceAspectRatio
-            ? "Menyimpan rasio asli video..."
-            : "Membuat video 9:16..."));
+            ? "Preserving the source aspect ratio..."
+            : "Rendering 9:16 video..."));
         try
         {
             await _renderer.RenderAsync(source, assFile, output, job, cropExpression, clip.PreserveFullFrame,
@@ -242,29 +242,29 @@ public sealed class ClipPipeline
             var cachedPart = _cache.GetVideoPath(url, segment.StartSeconds, segment.EndSeconds);
             if (_cache.TryGetVideo(cachedPart))
             {
-                progress.Report(JobProgress.Stage($"Cache bagian {i + 1}/{segments.Count} cocok; melewati unduhan."));
+                progress.Report(JobProgress.Stage($"Segment cache found for {i + 1}/{segments.Count}. Skipping download."));
                 partPaths.Add(cachedPart);
                 continue;
             }
 
-            progress.Report(JobProgress.Stage($"Mengunduh bagian {i + 1}/{segments.Count} ({segment.TimeRange})..."));
+            progress.Report(JobProgress.Stage($"Downloading segment {i + 1}/{segments.Count} ({segment.TimeRange})..."));
             var path = Path.Combine(job, $"part-{i + 1:000}.mp4");
             await _ytDlp.DownloadSectionAsync(url, segment.StartSeconds, segment.EndSeconds,
                 path, job, p => progress.Report(p with
                 {
-                    Message = $"Unduh bagian {i + 1}/{segments.Count}",
+                    Message = $"Downloading segment {i + 1}/{segments.Count}",
                     Percent = p.Percent is { } percent ? (i + percent / 100d) / segments.Count * 100 : null
                 }), ct);
             try
             {
                 _cache.StoreVideo(path, cachedPart);
                 partPaths.Add(cachedPart);
-                progress.Report(JobProgress.Stage($"Bagian {i + 1}/{segments.Count} disimpan ke cache."));
+                progress.Report(JobProgress.Stage($"Segment {i + 1}/{segments.Count} saved to the cache."));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 partPaths.Add(path);
-                progress.Report(JobProgress.Stage($"Cache bagian {i + 1} gagal disimpan; render tetap dilanjutkan."));
+                progress.Report(JobProgress.Stage($"Could not cache segment {i + 1}. Rendering will continue."));
             }
         }
 
@@ -274,7 +274,7 @@ public sealed class ClipPipeline
         await File.WriteAllLinesAsync(concatList, lines, new System.Text.UTF8Encoding(false), ct);
 
         var joined = Path.Combine(job, "video-ringkas-source.mp4");
-        progress.Report(JobProgress.Stage($"Menyambung {segments.Count} bagian sesuai urutan asli tanpa mengubah kecepatan..."));
+        progress.Report(JobProgress.Stage($"Joining {segments.Count} segments in source order without changing playback speed..."));
         var result = await ProcessRunner.RunAsync(ProcessRunner.RequireTool("ffmpeg"),
             ["-y", "-f", "concat", "-safe", "0", "-i", concatList, "-c", "copy", "-movflags", "+faststart", joined],
             job, line =>
@@ -282,22 +282,22 @@ public sealed class ClipPipeline
                 if (!string.IsNullOrWhiteSpace(line)) progress.Report(JobProgress.Stage(line.Trim()));
             }, ct);
         if (result.ExitCode != 0 || !File.Exists(joined) || new FileInfo(joined).Length < 20_000)
-            throw new InvalidOperationException("Bagian video gagal disambung. " + (result.Tail() ?? "File hasil gabungan kosong."));
+            throw new InvalidOperationException("Could not join the video segments. " + (result.Tail() ?? "The joined output file is empty."));
         try
         {
             _cache.StoreVideo(joined, joinedCachePath);
-            progress.Report(JobProgress.Stage("Video gabungan disimpan ke cache; edit subtitle/narasi tidak perlu mengunduh ulang."));
+            progress.Report(JobProgress.Stage("Joined video saved to the cache. Subtitle and narration edits will not require another download."));
             return joinedCachePath;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            progress.Report(JobProgress.Stage("Cache gabungan gagal disimpan; render tetap dilanjutkan."));
+            progress.Report(JobProgress.Stage("Could not cache the joined video. Rendering will continue."));
         }
         return joined;
     }
 
     /// <summary>Nama unik per video + klip + rentang waktu, supaya scan video lain tidak menimpa hasil sebelumnya.</summary>
-    private static string BuildFileName(string title, ClipCandidate clip)
+    internal static string BuildFileName(string title, ClipCandidate clip)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var slug = new string(title.Select(c => invalid.Contains(c) || char.IsWhiteSpace(c) ? '_' : c).ToArray());
