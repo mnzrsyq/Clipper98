@@ -17,9 +17,7 @@ if (-not $iscc) {
 & (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $versionNumber
 New-Item -ItemType Directory -Path $installerDir -Force | Out-Null
 $installerPath = Join-Path $installerDir "Clipper98-Setup-$tag.exe"
-$publishDirDefine = '/DPublishDir="' + $publishDir + '"'
-$outputDirDefine = '/DOutputDir="' + $installerDir + '"'
-& $iscc.Source "/DAppVersion=$versionNumber" $publishDirDefine $outputDirDefine `
+& $iscc.Source "/DAppVersion=$versionNumber" `
     (Join-Path $repoRoot 'installer\Clipper98.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup gagal membuat installer (exit code $LASTEXITCODE)." }
 if (-not (Test-Path -LiteralPath $installerPath)) {
