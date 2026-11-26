@@ -49,6 +49,7 @@ public partial class MainWindow : Window
         OriginalVolumeSlider.Value = Math.Clamp(_settings.OriginalVolumePercent, 0, 150);
         TtsPitchSlider.Value = Math.Clamp(_settings.TtsPitchCents, -300, 300);
         UpdateTtsVoiceChoices(_settings.TtsVoice);
+        ShortClipSubtitleCheckBox.IsChecked = _settings.UseShortClipSubtitles;
         LoadSavedSubtitlePresets();
         FramePathText.Text = string.IsNullOrWhiteSpace(_settings.FramePngPath) ? "Belum ada frame" : _settings.FramePngPath;
         Loaded += (_, _) =>
@@ -130,16 +131,29 @@ public partial class MainWindow : Window
         UpdatePreview();
     }
 
+    private void ShortClipSubtitle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (LanguageBox is null) return;
+        _settings.UseShortClipSubtitles = ShortClipSubtitleCheckBox.IsChecked == true;
+        if (_windowReady) SettingsStore.Save(_settings);
+        UpdateModeDependentControls();
+        UpdatePreview();
+    }
+
     private void CondensedAspect_Changed(object sender, SelectionChangedEventArgs e) => UpdateModeDependentControls();
 
     private void UpdateModeDependentControls()
     {
         if (SubtitleSettingsPanel is null) return;
         var condensed = IsCondensedMode;
-        var useSubtitles = !condensed || CondensedSubtitleCheckBox.IsChecked == true;
+        var useSubtitles = condensed
+            ? CondensedSubtitleCheckBox.IsChecked == true
+            : ShortClipSubtitleCheckBox.IsChecked == true;
+        ShortClipSubtitleCheckBox.Visibility = condensed ? Visibility.Collapsed : Visibility.Visible;
+        ShortClipSubtitleCheckBox.IsEnabled = _cts is null && !condensed;
         CondensedSubtitleCheckBox.Visibility = condensed ? Visibility.Visible : Visibility.Collapsed;
         CondensedSubtitleCheckBox.IsEnabled = _cts is null && condensed;
-        SubtitleSettingsPanel.IsEnabled = useSubtitles;
+        SubtitleSettingsPanel.IsEnabled = _cts is null && useSubtitles;
         SubtitleSourceBox.IsEnabled = _cts is null && !condensed;
         LanguageBox.IsEnabled = _cts is null && useSubtitles;
         var portraitOutput = condensed && SelectedText(CondensedAspectBox, "source") == "portrait";
@@ -327,7 +341,9 @@ public partial class MainWindow : Window
             var url = UrlBox.Text.Trim();
             var language = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "id";
             var isCondensed = _manifest?.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase) == true;
-            var useSubtitles = !isCondensed || CondensedSubtitleCheckBox.IsChecked == true;
+            var useSubtitles = isCondensed
+                ? CondensedSubtitleCheckBox.IsChecked == true
+                : ShortClipSubtitleCheckBox.IsChecked == true;
             var useNarration = isCondensed && CondensedNarrationCheckBox.IsChecked == true;
             if (useNarration && selected.Any(clip => clip.KeptSegments.Count == 0
                     || clip.KeptSegments.Any(segment => string.IsNullOrWhiteSpace(segment.Narration))))
@@ -1132,7 +1148,10 @@ public partial class MainWindow : Window
         LetterSpacingLabel.Text = $"{style.LetterSpacing:0.#} px";
         LineSpacingLabel.Text = $"{style.LineSpacing} px";
         PreviewCaption.Update(style, SubtitleFonts.ResolvePreviewFamily(FontBox.SelectedItem as SubtitleFontOption));
-        PreviewCaption.Visibility = IsCondensedMode && CondensedSubtitleCheckBox.IsChecked != true
+        var subtitlesDisabled = IsCondensedMode
+            ? CondensedSubtitleCheckBox.IsChecked != true
+            : ShortClipSubtitleCheckBox.IsChecked != true;
+        PreviewCaption.Visibility = subtitlesDisabled
             ? Visibility.Collapsed
             : Visibility.Visible;
 
@@ -1198,6 +1217,7 @@ public partial class MainWindow : Window
         ProcessingModeBox.IsEnabled = !busy;
         TargetDurationBox.IsEnabled = !busy;
         CondensedAspectBox.IsEnabled = !busy;
+        ShortClipSubtitleCheckBox.IsEnabled = !busy;
         CondensedSubtitleCheckBox.IsEnabled = !busy;
         TtsProviderBox.IsEnabled = !busy;
         TtsVoiceBox.IsEnabled = !busy;

@@ -133,14 +133,12 @@ public sealed class ClipRenderer
             else graph.Add("[voice_mix]anull[aout]");
         }
 
-        var filterGraphPath = Path.Combine(workDir, "render-filtergraph.txt");
-        await File.WriteAllTextAsync(filterGraphPath, string.Join(";", graph), new System.Text.UTF8Encoding(false), ct);
-
+        var filterGraph = string.Join(";", graph);
         var args = new List<string> { "-y", "-i", source };
         if (hasFrame) args.AddRange(["-loop", "1", "-i", framePngPath!]);
         foreach (var track in narrationTracks) args.AddRange(["-i", track.FilePath]);
         args.AddRange([
-            "-filter_complex_script", filterGraphPath,
+            "-filter_complex", filterGraph,
             "-map", "[vout]"
         ]);
         if (hasNarration) args.AddRange(["-map", "[aout]"]);

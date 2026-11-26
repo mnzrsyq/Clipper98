@@ -176,6 +176,7 @@
       <GroupBox Grid.Column="4" Header="SUBTITLE &amp; FRAME" Background="{StaticResource WindowBrush}">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel>
+            <CheckBox x:Name="ShortClipSubtitleCheckBox" Content="Tampilkan subtitle pada klip pendek" IsChecked="True" Margin="0,0,0,8" Visibility="Collapsed" Checked="ShortClipSubtitle_Changed" Unchecked="ShortClipSubtitle_Changed" />
             <CheckBox x:Name="CondensedSubtitleCheckBox" Content="Tampilkan subtitle pada video ringkas" IsChecked="False" Margin="0,0,0,8" Visibility="Collapsed" Checked="CondensedSubtitle_Changed" Unchecked="CondensedSubtitle_Changed" />
             <StackPanel x:Name="SubtitleSettingsPanel">
             <TextBlock Text="SUMBER TRANSKRIP" FontWeight="Bold" Margin="0,0,0,3" />

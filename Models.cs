@@ -146,6 +146,7 @@ public sealed class AppSettings
 {
     public string OutputFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Clipper98");
     public string SubtitleSource { get; set; } = "auto";
+    public bool UseShortClipSubtitles { get; set; } = true;
     public List<SubtitleStylePreset> SubtitlePresets { get; set; } = [];
     public string FramePngPath { get; set; } = string.Empty;
     public bool UseNarration { get; set; }

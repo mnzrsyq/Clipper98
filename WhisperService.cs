@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Clipper98;
 
 /// <summary>Transkrip lokal dengan whisper.cpp (audio diekstrak lewat FFmpeg).</summary>
@@ -27,8 +29,10 @@ public sealed class WhisperService
 
         // "-l" selalu diberikan, termasuk "auto". Tanpa "-l", whisper.cpp memakai English sebagai default.
         var prefix = Path.Combine(workDir, "clip-transcript");
+        var threadCount = Math.Max(1, Environment.ProcessorCount);
         var transcript = await ProcessRunner.RunAsync(
-            whisper, ["-m", model, "-l", language, "-f", wav, "-osrt", "-ojf", "-of", prefix], workDir, null, ct);
+            whisper, ["-m", model, "-t", threadCount.ToString(CultureInfo.InvariantCulture), "-l", language,
+                "-f", wav, "-osrt", "-ojf", "-of", prefix], workDir, null, ct);
         if (transcript.ExitCode != 0) throw new InvalidOperationException("Whisper gagal mentranskrip klip. " + transcript.Tail());
 
         var cues = SubtitleParser.ParseWordJson(prefix + ".json");
