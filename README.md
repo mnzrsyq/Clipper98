@@ -1,17 +1,31 @@
-# Clipper98
+<h1 align="center">Clipper98</h1>
 
-**Buat klip pendek atau ringkas video YouTube langsung di Windows.** Pilih momen lewat Gemini CLI, impor manifest ke Clipper98, lalu unduh dan render videonya secara lokal.
+<p align="center"><strong>Buat klip pendek atau ringkas video YouTube langsung di Windows.</strong><br>
+Pilih momen lewat Gemini CLI, impor manifest ke Clipper98, lalu unduh dan render videonya secara lokal.</p>
 
-[![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6)](https://github.com/mnzrsyq/Clipper98)
-[![.NET target](https://img.shields.io/badge/.NET%20target-8-512BD4)](https://github.com/mnzrsyq/Clipper98/blob/main/Clipper98.csproj)
+<p align="center">
+  <a href="https://github.com/mnzrsyq/Clipper98/blob/main/installer/Clipper98.iss"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6" alt="Platform: Windows x64"></a>
+  <a href="https://github.com/mnzrsyq/Clipper98/blob/main/Clipper98.csproj"><img src="https://img.shields.io/badge/.NET%20target-8-512BD4" alt="Target framework: .NET 8"></a>
+</p>
 
-**[Preview](#preview) · [Fitur](#fitur) · [Instalasi](#instalasi) · [Cara-pakai](#cara-pakai) · [Konfigurasi](#konfigurasi) · [FAQ](#faq) · [Kontribusi](#kontribusi)**
+<p align="center">
+  <a href="#preview">Preview</a> · <a href="#fitur">Fitur</a> · <a href="#instalasi">Instalasi</a> · <a href="#cara-pakai">Cara pakai</a> · <a href="#konfigurasi">Konfigurasi</a> · <a href="#faq">FAQ</a> · <a href="#kontribusi">Kontribusi</a>
+</p>
 
 ---
 
 ## Preview
 
-TODO: tambahkan screenshot asli jendela Clipper98 dan contoh hasil render. Saat ini repo belum menyertakan screenshot atau GIF aplikasi.
+<p align="center">
+  <a href="screenshots/short-clips-mode.png"><img src="screenshots/short-clips-mode.png" alt="Tampilan Clipper98 pada mode Klip Pendek" width="49%"></a>
+  <a href="screenshots/condense-mode.png"><img src="screenshots/condense-mode.png" alt="Tampilan Clipper98 pada mode Ringkas Video" width="49%"></a>
+</p>
+
+<p align="center">
+  <sub><strong>Klip Pendek</strong> · pilih kandidat, subtitle, dan framing</sub>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <sub><strong>Ringkas Video</strong> · atur bagian, voice-over, dan subtitle</sub>
+</p>
 
 ## Fitur
 
