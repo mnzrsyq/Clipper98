@@ -32,17 +32,29 @@ public static class ClipperJobScript
 
     public static void Save(string path, ClipperJobManifest manifest, IReadOnlyCollection<ClipCandidate> clips)
     {
-        manifest.ClipsData = clips.Select(clip => new ClipperJobClip
+        if (manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase))
         {
-            Id = clip.Name,
-            StartSeconds = clip.Start,
-            EndSeconds = clip.End,
-            Selected = clip.IsSelected,
-            Hook = clip.Hook,
-            Reason = clip.Reason,
-            Caption = clip.Caption,
-            Hashtags = clip.Hashtags.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
-        }).ToList();
+            manifest.KeepSegments = clips.FirstOrDefault()?.KeptSegments ?? [];
+            manifest.ClipsData = [];
+            manifest.YouTubeTitle = clips.FirstOrDefault()?.YouTubeTitle ?? string.Empty;
+            manifest.YouTubeDescription = clips.FirstOrDefault()?.YouTubeDescription ?? string.Empty;
+        }
+        else
+        {
+            manifest.ClipsData = clips.Select(clip => new ClipperJobClip
+            {
+                Id = clip.Name,
+                StartSeconds = clip.Start,
+                EndSeconds = clip.End,
+                Selected = clip.IsSelected,
+                Hook = clip.Hook,
+                Reason = clip.Reason,
+                Caption = clip.Caption,
+                Hashtags = clip.Hashtags.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                YouTubeTitle = clip.YouTubeTitle,
+                YouTubeDescription = clip.YouTubeDescription
+            }).ToList();
+        }
 
         var json = JsonSerializer.Serialize(manifest, JsonOptions);
         var python = ConvertJsonLiterals(json);
@@ -58,21 +70,77 @@ public static class ClipperJobScript
         var manifest = JsonSerializer.Deserialize<ClipperJobManifest>(root.GetRawText())
             ?? throw new JsonException("Manifest kosong.");
         if (manifest.SchemaVersion != 1) throw new InvalidOperationException($"Versi manifest {manifest.SchemaVersion} belum didukung.");
+        if (manifest.Mode is null || manifest.KeepSegments is null || manifest.ClipsData is null)
+            throw new InvalidOperationException("Mode atau daftar bagian di manifest tidak valid.");
         if (!string.Equals(manifest.Source.Platform, "youtube", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Sumber manifest harus video YouTube.");
         if (!IsYouTubeUrl(manifest.Source.Url))
             throw new InvalidOperationException("URL YouTube di manifest tidak valid.");
-        if (manifest.RequestedCandidateCount is < 1 or > 20)
-            throw new InvalidOperationException("Jumlah kandidat di manifest harus antara 1 dan 20.");
         if (manifest.Constraints.MaxHeight is < 1 or > 1080)
             throw new InvalidOperationException("Resolusi manifest tidak boleh melebihi 1080p.");
-        if (manifest.ClipsData.Count is < 1 or > 20)
-            throw new InvalidOperationException("Manifest harus memiliki 1 sampai 20 kandidat.");
+        if (string.Equals(manifest.Mode, "condense", StringComparison.OrdinalIgnoreCase))
+        {
+            if (manifest.KeepSegments.Count is < 1 or > 100)
+                throw new InvalidOperationException("Video ringkas harus memiliki 1 sampai 100 bagian yang dipertahankan.");
+            if (manifest.TargetDurationSeconds < 0)
+                throw new InvalidOperationException("Target durasi hasil tidak valid.");
+        }
+        else
+        {
+            if (!manifest.Mode.Equals("short_clips", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Mode manifest harus short_clips atau condense.");
+            if (manifest.RequestedCandidateCount is < 1 or > 20)
+                throw new InvalidOperationException("Jumlah kandidat di manifest harus antara 1 dan 20.");
+            if (manifest.ClipsData.Count is < 1 or > 20)
+                throw new InvalidOperationException("Manifest harus memiliki 1 sampai 20 kandidat.");
+        }
         return manifest;
     }
 
     private static List<ClipCandidate> ValidateAndMap(ClipperJobManifest manifest)
     {
+        if (string.Equals(manifest.Mode, "condense", StringComparison.OrdinalIgnoreCase))
+        {
+            var orderedSegments = manifest.KeepSegments.OrderBy(segment => segment.StartSeconds).ToList();
+            var previousEnd = 0d;
+            foreach (var segment in orderedSegments)
+            {
+                if (!double.IsFinite(segment.StartSeconds) || !double.IsFinite(segment.EndSeconds)
+                    || segment.StartSeconds < 0 || segment.EndSeconds <= segment.StartSeconds
+                    || segment.StartSeconds < previousEnd
+                    || string.IsNullOrWhiteSpace(segment.Reason)
+                    || (segment.Narration?.Length ?? 0) > 1600
+                    || !double.IsFinite(segment.NarrationOffsetSeconds)
+                    || segment.NarrationOffsetSeconds < 0
+                    || segment.NarrationOffsetSeconds > segment.EndSeconds - segment.StartSeconds
+                    || (manifest.Source.DurationSeconds is > 0 and var sourceDuration && segment.EndSeconds > sourceDuration))
+                    throw new InvalidOperationException("Bagian video ringkas harus memiliki alasan, berurutan, tidak tumpang tindih, dan berada di dalam durasi video sumber.");
+                previousEnd = segment.EndSeconds;
+            }
+
+            var keptDuration = orderedSegments.Sum(segment => segment.DurationSeconds);
+            if (manifest.YouTubeTitle?.Length > 100)
+                throw new InvalidOperationException("Judul YouTube di manifest maksimal 100 karakter.");
+            if (manifest.YouTubeDescription?.Length > 5000)
+                throw new InvalidOperationException("Deskripsi YouTube di manifest maksimal 5.000 karakter.");
+            var lead = orderedSegments[0].StartSeconds;
+            var tail = orderedSegments[^1].EndSeconds;
+            return
+            [
+                new ClipCandidate
+                {
+                    Name = "video_ringkas",
+                    Start = lead,
+                    End = tail,
+                    Hook = string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "Video ringkas" : manifest.CondensedSummary,
+                    Reason = $"{orderedSegments.Count} bagian dipertahankan · hasil sekitar {TimeSpan.FromSeconds(keptDuration):hh\\:mm\\:ss}",
+                    KeptSegments = orderedSegments,
+                    YouTubeTitle = manifest.YouTubeTitle ?? string.Empty,
+                    YouTubeDescription = manifest.YouTubeDescription ?? string.Empty
+                }
+            ];
+        }
+
         var clips = new List<ClipCandidate>();
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in manifest.ClipsData)
@@ -93,7 +161,9 @@ public static class ClipperJobScript
                 Hook = item.Hook,
                 Reason = item.Reason,
                 Caption = item.Caption,
-                Hashtags = string.Join(" ", item.Hashtags)
+                Hashtags = string.Join(" ", item.Hashtags),
+                YouTubeTitle = item.YouTubeTitle,
+                YouTubeDescription = item.YouTubeDescription
             });
         }
 

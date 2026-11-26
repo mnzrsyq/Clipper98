@@ -22,6 +22,7 @@ public sealed record ComponentDownloadProgress(string Component, long BytesRecei
 public sealed class ComponentDownloadService
 {
     private const string ModelName = "ggml-large-v3-turbo.bin";
+    private const string FaceModelName = "haarcascade_frontalface_default.xml";
     private static readonly HttpClient Http = CreateClient();
     private static readonly string ToolsDirectory = Path.Combine(AppContext.BaseDirectory, "tools");
     private static readonly string ModelsDirectory = Path.Combine(ToolsDirectory, "models");
@@ -57,6 +58,12 @@ public sealed class ComponentDownloadService
                         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true",
                         Path.Combine(ModelsDirectory, ModelName), component, progress, cancellationToken);
                     break;
+                case "Model face detection":
+                    Directory.CreateDirectory(ModelsDirectory);
+                    await DownloadFileAsync(
+                        "https://raw.githubusercontent.com/opencv/opencv/4.x/data/haarcascades/haarcascade_frontalface_default.xml",
+                        Path.Combine(ModelsDirectory, FaceModelName), component, progress, cancellationToken);
+                    break;
                 default:
                     throw new InvalidOperationException($"Komponen tidak dikenal: {component}");
             }
@@ -70,6 +77,7 @@ public sealed class ComponentDownloadService
         "ffmpeg.exe" => ProcessRunner.FindTool("ffmpeg") is null,
         "whisper-cli.exe" => ProcessRunner.FindTool("whisper-cli") is null,
         "Whisper Large-v3-Turbo" => !File.Exists(Path.Combine(ModelsDirectory, ModelName)),
+        "Model face detection" => !File.Exists(Path.Combine(ModelsDirectory, FaceModelName)),
         _ => true
     };
 
@@ -176,29 +184,31 @@ public sealed class ComponentDownloadService
             response.EnsureSuccessStatusCode();
             var length = response.Content.Headers.ContentLength;
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, useAsync: true);
-            var buffer = new byte[131072];
             long received = 0;
-            long nextUnknownLengthReport = 4L * 1024 * 1024;
-            int? lastPercent = null;
-            int count;
-            while ((count = await input.ReadAsync(buffer, cancellationToken)) > 0)
             {
-                await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
-                received += count;
-                int? currentPercent = length is > 0 ? (int)Math.Clamp(received * 100d / length.Value, 0, 100) : null;
-                if (currentPercent is { } percent && percent != lastPercent)
+                await using var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, useAsync: true);
+                var buffer = new byte[131072];
+                long nextUnknownLengthReport = 4L * 1024 * 1024;
+                int? lastPercent = null;
+                int count;
+                while ((count = await input.ReadAsync(buffer, cancellationToken)) > 0)
                 {
-                    progress.Report(new ComponentDownloadProgress(component, received, length));
-                    lastPercent = percent;
+                    await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+                    received += count;
+                    int? currentPercent = length is > 0 ? (int)Math.Clamp(received * 100d / length.Value, 0, 100) : null;
+                    if (currentPercent is { } percent && percent != lastPercent)
+                    {
+                        progress.Report(new ComponentDownloadProgress(component, received, length));
+                        lastPercent = percent;
+                    }
+                    else if (currentPercent is null && received >= nextUnknownLengthReport)
+                    {
+                        progress.Report(new ComponentDownloadProgress(component, received, length));
+                        nextUnknownLengthReport = received + 4L * 1024 * 1024;
+                    }
                 }
-                else if (currentPercent is null && received >= nextUnknownLengthReport)
-                {
-                    progress.Report(new ComponentDownloadProgress(component, received, length));
-                    nextUnknownLengthReport = received + 4L * 1024 * 1024;
-                }
+                await output.FlushAsync(cancellationToken);
             }
-            await output.FlushAsync(cancellationToken);
             if (received == 0) throw new InvalidDataException($"Unduhan {component} kosong.");
             File.Move(temporary, destination, overwrite: true);
             progress.Report(new ComponentDownloadProgress(component, received, length));

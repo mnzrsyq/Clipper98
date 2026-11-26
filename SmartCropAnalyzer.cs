@@ -15,7 +15,8 @@ public sealed class SmartCropAnalyzer
 {
     private const int MinimumNoFaceSamples = 2;
 
-    public async Task<SmartCropAnalysis> AnalyzeAsync(string videoFile, string workDir, CancellationToken ct)
+    public async Task<SmartCropAnalysis> AnalyzeAsync(
+        string videoFile, string workDir, CancellationToken ct, int cropHeight = 1920)
     {
         try
         {
@@ -78,7 +79,7 @@ public sealed class SmartCropAnalyzer
             if (samples.Count == 0)
                 return new SmartCropAnalysis(true, false, null, fullFrameSegments);
             if (sourceHeight <= 0) return Unavailable();
-            var scaledWidth = Math.Max(1080.0, sourceWidth / sourceHeight * 1920.0);
+            var scaledWidth = Math.Max(1080.0, sourceWidth / sourceHeight * cropHeight);
             var maxX = Math.Max(0.0, scaledWidth - 1080.0);
             if (maxX <= 1)
                 return new SmartCropAnalysis(true, true, null, fullFrameSegments);

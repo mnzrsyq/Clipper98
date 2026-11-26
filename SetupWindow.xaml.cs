@@ -86,7 +86,8 @@ public partial class SetupWindow : Window
             ["Node.js untuk YouTube"] = ProcessRunner.FindTool("node") is not null || ProcessRunner.FindCommand("node") is not null,
             ["ffmpeg.exe"] = ProcessRunner.FindTool("ffmpeg") is not null,
             ["whisper-cli.exe"] = ProcessRunner.FindTool("whisper-cli") is not null,
-            ["Whisper Large-v3-Turbo"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "ggml-large-v3-turbo.bin"))
+            ["Whisper Large-v3-Turbo"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "ggml-large-v3-turbo.bin")),
+            ["Model face detection"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml"))
         };
         ChecksBox.Text = string.Join(Environment.NewLine, ChecksBox.Text.Split(Environment.NewLine)
             .Select(line =>
@@ -107,6 +108,7 @@ public partial class SetupWindow : Window
         "ffmpeg.exe" => ProcessRunner.FindTool("ffmpeg") is null,
         "whisper-cli.exe" => ProcessRunner.FindTool("whisper-cli") is null,
         "Whisper Large-v3-Turbo" => !File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "ggml-large-v3-turbo.bin")),
+        "Model face detection" => !File.Exists(Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml")),
         _ => false
     };
 

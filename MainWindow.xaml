@@ -34,7 +34,7 @@
           </StackPanel>
         </Grid>
         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-          <Button x:Name="CopyPromptButton" Content="CALL SKILL" Height="26" Margin="0,1" Padding="3,1" Click="CopyPromptButton_Click" />
+          <Button x:Name="CopyPromptButton" Content="PROMPT GEMINI" Height="26" Margin="0,1" Padding="3,1" Click="CopyPromptButton_Click" />
           <Button x:Name="ImportScriptButton" Content="IMPORT .PY" Height="26" Margin="0,1" Padding="3,1" Click="ImportScriptButton_Click" />
         </StackPanel>
       </Grid>
@@ -57,14 +57,71 @@
         </Grid.RowDefinitions>
         <Border Grid.Row="0" BorderBrush="#808080" BorderThickness="1" Background="{StaticResource WindowBrush}" Padding="8" Margin="0,0,0,7">
           <StackPanel>
-            <TextBlock Text="JUMLAH OTOMATIS" FontWeight="Bold" Margin="0,0,0,4" />
-            <DockPanel LastChildFill="False">
-              <TextBox x:Name="CandidateCountBox" Text="5" Width="48" VerticalContentAlignment="Center" />
-              <Button Content="BUAT TIMESTAMP" Margin="8,0,0,0" Padding="6,2" Click="AddTimestampButton_Click" />
-            </DockPanel>
+            <TextBlock Text="MODE" FontWeight="Bold" Margin="0,0,0,4" />
+            <ComboBox x:Name="ProcessingModeBox" SelectionChanged="ProcessingModeBox_SelectionChanged" SelectedIndex="0">
+              <ComboBoxItem Content="Klip Pendek" Tag="short_clips" />
+              <ComboBoxItem Content="Ringkas Video" Tag="condense" />
+            </ComboBox>
+            <StackPanel x:Name="ShortClipOptionsPanel" Margin="0,8,0,0">
+              <TextBlock Text="JUMLAH KLIP" FontWeight="Bold" Margin="0,0,0,4" />
+              <DockPanel LastChildFill="False">
+                <TextBox x:Name="CandidateCountBox" Text="5" Width="48" VerticalContentAlignment="Center" />
+                <Button Content="BUAT TIMESTAMP" Margin="8,0,0,0" Padding="6,2" Click="AddTimestampButton_Click" />
+              </DockPanel>
+            </StackPanel>
+            <StackPanel x:Name="CondensedOptionsPanel" Margin="0,8,0,0" Visibility="Collapsed">
+              <TextBlock Text="DURASI HASIL" FontWeight="Bold" Margin="0,0,0,4" />
+              <ComboBox x:Name="TargetDurationBox" SelectedIndex="0">
+                <ComboBoxItem Content="Otomatis" Tag="0" />
+                <ComboBoxItem Content="Sekitar 3 menit" Tag="180" />
+                <ComboBoxItem Content="Sekitar 5 menit" Tag="300" />
+                <ComboBoxItem Content="Sekitar 10 menit" Tag="600" />
+              </ComboBox>
+              <TextBlock Text="RASIO VIDEO" FontWeight="Bold" Margin="0,8,0,4" />
+              <ComboBox x:Name="CondensedAspectBox" SelectedIndex="0" SelectionChanged="CondensedAspect_Changed">
+                <ComboBoxItem Content="Ikuti sumber" Tag="source" />
+                <ComboBoxItem Content="Vertikal 9:16 · isi 4:5" Tag="portrait" />
+              </ComboBox>
+              <CheckBox x:Name="CondensedNarrationCheckBox" Content="Tambahkan narasi VO" IsChecked="False" Margin="0,5,0,0" Checked="NarrationEnabled_Changed" Unchecked="NarrationEnabled_Changed" />
+              <Expander x:Name="NarrationSettingsExpander" Header="PENGATURAN SUARA" IsExpanded="False" Margin="0,4,0,0">
+                <StackPanel x:Name="NarrationSettingsPanel" Margin="4,4,0,0" IsEnabled="False">
+                  <TextBlock Text="MESIN TTS" FontWeight="Bold" Margin="0,0,0,3" />
+                  <ComboBox x:Name="TtsProviderBox" SelectionChanged="TtsProvider_Changed" SelectedIndex="0">
+                    <ComboBoxItem Content="Online · Edge-TTS" Tag="edge" />
+                    <ComboBoxItem Content="Online · Fish Audio S2.1 Pro Free" Tag="fish" />
+                  </ComboBox>
+                  <TextBlock x:Name="FishApiKeyLabel" Text="FISH AUDIO API KEY" FontWeight="Bold" Margin="0,7,0,3" />
+                  <PasswordBox x:Name="FishApiKeyBox" PasswordChanged="FishApiKey_Changed" ToolTip="API key disimpan terenkripsi di PC ini." />
+                  <TextBlock Text="Key disimpan terenkripsi di PC ini. Dapatkan/ganti key kapan saja dari Fish Audio." FontSize="10" Foreground="#505050" TextWrapping="Wrap" Margin="0,2,0,0" />
+                  <TextBlock Text="SUARA" FontWeight="Bold" Margin="0,7,0,3" />
+                  <ComboBox x:Name="TtsVoiceBox" SelectionChanged="TtsControl_Changed" />
+                  <DockPanel Margin="0,7,0,0">
+                    <TextBlock Text="LAJU BICARA" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="TtsRateLabel" Text="Normal" HorizontalAlignment="Right" />
+                  </DockPanel>
+                  <Slider x:Name="TtsRateSlider" Minimum="-30" Maximum="30" Value="0" TickFrequency="5" ValueChanged="TtsControl_Changed" ToolTip="Atur laju narasi tanpa mengubah kecepatan video." />
+                  <DockPanel Margin="0,4,0,0">
+                    <TextBlock Text="VOLUME NARASI" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="TtsVolumeLabel" Text="100%" HorizontalAlignment="Right" />
+                  </DockPanel>
+                  <Slider x:Name="TtsVolumeSlider" Minimum="0" Maximum="150" Value="100" TickFrequency="10" ValueChanged="TtsControl_Changed" />
+                  <DockPanel Margin="0,4,0,0">
+                    <TextBlock Text="AUDIO ASLI" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="OriginalVolumeLabel" Text="55%" HorizontalAlignment="Right" />
+                  </DockPanel>
+                  <Slider x:Name="OriginalVolumeSlider" Minimum="0" Maximum="150" Value="55" TickFrequency="10" ValueChanged="TtsControl_Changed" ToolTip="Atur kerasnya audio asli saat narasi diputar." />
+                  <DockPanel Margin="0,4,0,0">
+                    <TextBlock Text="PITCH" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="TtsPitchLabel" Text="0" HorizontalAlignment="Right" />
+                  </DockPanel>
+                  <Slider x:Name="TtsPitchSlider" Minimum="-300" Maximum="300" Value="0" TickFrequency="50" ValueChanged="TtsControl_Changed" ToolTip="Geser pitch suara; nol memakai nada asli." />
+                  <TextBlock Text="Fish Audio dan Edge-TTS memerlukan koneksi internet." FontSize="10" Foreground="#505050" TextWrapping="Wrap" Margin="0,3,0,0" />
+                </StackPanel>
+              </Expander>
+            </StackPanel>
           </StackPanel>
         </Border>
-        <GroupBox Grid.Row="1" Header="KANDIDAT KLIP" Background="{StaticResource WindowBrush}">
+        <GroupBox x:Name="ClipListGroupBox" Grid.Row="1" Header="KANDIDAT KLIP" Background="{StaticResource WindowBrush}">
           <ListBox x:Name="ClipList" SelectionChanged="ClipList_SelectionChanged" BorderBrush="#707070" BorderThickness="1">
             <ListBox.ItemTemplate>
               <DataTemplate>
@@ -80,8 +137,10 @@
           </ListBox>
         </GroupBox>
         <StackPanel Grid.Row="2" Margin="0,7,0,0">
-          <TextBlock x:Name="ClipDetail" Text="Impor manifest hasil @clipper untuk menampilkan kandidat." TextWrapping="Wrap" Foreground="#303030" />
-          <DockPanel Margin="0,6,0,0">
+          <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
+            <TextBlock x:Name="ClipDetail" Text="Impor manifest hasil @clipper untuk menampilkan kandidat." TextWrapping="Wrap" Foreground="#303030" />
+          </ScrollViewer>
+          <DockPanel x:Name="TimestampEditPanel" Margin="0,6,0,0">
             <TextBlock Text="MULAI" VerticalAlignment="Center" Margin="0,0,4,0" />
             <TextBox x:Name="StartTimeBox" Width="70" ToolTip="HH:MM:SS" Text="00:00:00" />
             <TextBlock Text="SELESAI" VerticalAlignment="Center" Margin="7,0,4,0" />
@@ -117,6 +176,8 @@
       <GroupBox Grid.Column="4" Header="SUBTITLE &amp; FRAME" Background="{StaticResource WindowBrush}">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel>
+            <CheckBox x:Name="CondensedSubtitleCheckBox" Content="Tampilkan subtitle pada video ringkas" IsChecked="False" Margin="0,0,0,8" Visibility="Collapsed" Checked="CondensedSubtitle_Changed" Unchecked="CondensedSubtitle_Changed" />
+            <StackPanel x:Name="SubtitleSettingsPanel">
             <TextBlock Text="SUMBER TRANSKRIP" FontWeight="Bold" Margin="0,0,0,3" />
             <ComboBox x:Name="SubtitleSourceBox" SelectionChanged="SubtitleSourceBox_SelectionChanged" SelectedIndex="0" ToolTip="Pilih sumber subtitle atau paksa transkrip ulang dengan Whisper">
               <ComboBoxItem Content="Otomatis — subtitle YouTube" Tag="auto" />
@@ -167,12 +228,18 @@
             </DockPanel>
             <Slider x:Name="FontSizeSlider" Minimum="80" Maximum="120" Value="100" TickFrequency="10" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
             <TextBlock Text="WARNA TEKS" FontWeight="Bold" Margin="0,7,0,3" />
-            <ComboBox x:Name="TextColorBox" SelectionChanged="StyleControl_Changed" SelectedIndex="0">
-              <ComboBoxItem Content="White" /><ComboBoxItem Content="Yellow" /><ComboBoxItem Content="Cyan" /><ComboBoxItem Content="Pink" />
+            <ComboBox x:Name="TextColorBox" SelectionChanged="ColorChoice_Changed" SelectedIndex="0">
+              <ComboBoxItem Content="Putih" Tag="White" /><ComboBoxItem Content="Kuning" Tag="Yellow" /><ComboBoxItem Content="Pink" Tag="Pink" /><ComboBoxItem Content="Merah" Tag="Red" /><ComboBoxItem Content="HEX kustom" Tag="custom" />
             </ComboBox>
+            <TextBox x:Name="TextColorHexBox" Text="#FFFFFF" Margin="0,3,0,0" ToolTip="Warna teks dalam format #RRGGBB" TextChanged="ColorHex_TextChanged" />
             <TextBlock Text="WARNA KATA AKTIF" FontWeight="Bold" Margin="0,7,0,3" />
-            <ComboBox x:Name="HighlightColorBox" SelectionChanged="StyleControl_Changed" SelectedIndex="0">
-              <ComboBoxItem Content="Yellow" /><ComboBoxItem Content="Cyan" /><ComboBoxItem Content="Pink" />
+            <ComboBox x:Name="HighlightColorBox" SelectionChanged="ColorChoice_Changed" SelectedIndex="1">
+              <ComboBoxItem Content="Putih" Tag="White" /><ComboBoxItem Content="Kuning" Tag="Yellow" /><ComboBoxItem Content="Pink" Tag="Pink" /><ComboBoxItem Content="Merah" Tag="Red" /><ComboBoxItem Content="HEX kustom" Tag="custom" />
+            </ComboBox>
+            <TextBox x:Name="HighlightColorHexBox" Text="#FFD329" Margin="0,3,0,0" ToolTip="Warna highlight dalam format #RRGGBB" TextChanged="ColorHex_TextChanged" />
+            <TextBlock Text="GAYA KATA AKTIF" FontWeight="Bold" Margin="0,7,0,3" />
+            <ComboBox x:Name="HighlightModeBox" SelectionChanged="StyleControl_Changed" SelectedIndex="0">
+              <ComboBoxItem Content="Ubah warna teks" Tag="color" /><ComboBoxItem Content="Kotak di belakang kata" Tag="box" />
             </ComboBox>
             <TextBlock Text="OUTLINE" FontWeight="Bold" Margin="0,7,0,3" />
             <Slider x:Name="OutlineSlider" Minimum="1" Maximum="10" Value="5" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
@@ -185,8 +252,7 @@
 
             <TextBlock Text="JUMLAH BARIS" FontWeight="Bold" Margin="0,10,0,3" />
             <ComboBox x:Name="MaxLinesBox" SelectionChanged="StyleControl_Changed" SelectedIndex="1">
-              <ComboBoxItem Content="1 baris" Tag="1" /><ComboBoxItem Content="2 baris" Tag="2" />
-              <ComboBoxItem Content="3 baris" Tag="3" /><ComboBoxItem Content="4 baris" Tag="4" />
+              <ComboBoxItem Content="Perkata" Tag="word" /><ComboBoxItem Content="1 baris" Tag="1" /><ComboBoxItem Content="2 baris" Tag="2" />
             </ComboBox>
             <DockPanel Margin="0,9,0,0">
               <TextBlock Text="JARAK BARIS" FontWeight="Bold" VerticalAlignment="Center" />
@@ -198,17 +264,39 @@
               <TextBlock x:Name="PositionYLabel" Text="1420 / 1920 px" HorizontalAlignment="Right" />
             </DockPanel>
             <Slider x:Name="PositionYSlider" Minimum="300" Maximum="1780" Value="1420" TickFrequency="40" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
+            </StackPanel>
 
             <Separator Margin="0,11,0,8" />
-            <TextBlock Text="Framing Klip Terpilih" FontWeight="Bold" Margin="0,0,0,4" />
+            <TextBlock x:Name="FramingHeaderText" Text="Framing Klip Terpilih" FontWeight="Bold" Margin="0,0,0,4" />
             <CheckBox x:Name="SmartCropBox" Content="Smart Crop" Checked="SmartCrop_Changed" Unchecked="SmartCrop_Changed" ToolTip="Dicentang: crop mengikuti wajah utama. Tidak dicentang: seluruh frame video terlihat dengan latar blur." />
-            <TextBlock Text="Jika Smart Crop aktif dan wajah tak terdeteksi selama 2 detik atau lebih, tampilan sementara beralih ke video utuh dengan latar blur." Foreground="#404040" FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0" />
+            <TextBlock x:Name="SmartCropHelpText" Text="Jika Smart Crop aktif dan wajah tak terdeteksi selama 2 detik atau lebih, tampilan sementara beralih ke video utuh dengan latar blur." Foreground="#404040" FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0" />
             <DockPanel Margin="0,9,0,0">
               <TextBlock Text="FRAME PNG" FontWeight="Bold" VerticalAlignment="Center" />
               <Button x:Name="FrameUploadButton" Content="PILIH" Padding="7,2" Click="FrameUploadButton_Click" />
               <Button x:Name="FrameRemoveButton" Content="HAPUS" Padding="7,2" Margin="5,0,0,0" Click="FrameRemoveButton_Click" />
             </DockPanel>
             <TextBlock x:Name="FramePathText" Text="Belum ada frame" Foreground="#404040" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0" />
+
+            <Separator Margin="0,12,0,8" />
+            <Expander x:Name="YouTubeMetadataExpander" Header="UPLOAD YOUTUBE" IsExpanded="True">
+              <StackPanel Margin="2,6,2,2">
+                <TextBlock Text="Metadata dari skill Gemini bisa diedit di sini; salin judul dan deskripsi untuk form upload." Foreground="#505050" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5" />
+                <TextBlock Text="JUDUL" FontWeight="Bold" />
+                <DockPanel Margin="0,3,0,2">
+                  <TextBlock x:Name="YouTubeTitleCountText" DockPanel.Dock="Right" Text="0 / 100" VerticalAlignment="Center" Margin="6,0,0,0" />
+                  <TextBox x:Name="YouTubeTitleBox" TextChanged="UploadMetadata_TextChanged" LostFocus="UploadMetadata_LostFocus" />
+                </DockPanel>
+                <Button x:Name="CopyYouTubeTitleButton" Content="SALIN JUDUL" HorizontalAlignment="Right" Padding="8,3" Click="CopyYouTubeTitleButton_Click" />
+
+                <TextBlock Text="DESKRIPSI + HASHTAG" FontWeight="Bold" Margin="0,9,0,0" />
+                <TextBlock Text="Hashtag ada di baris terakhir deskripsi dan ikut tersalin." Foreground="#505050" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,3" />
+                <TextBox x:Name="YouTubeDescriptionBox" MinHeight="120" MaxHeight="220" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="UploadMetadata_TextChanged" LostFocus="UploadMetadata_LostFocus" />
+                <DockPanel Margin="0,3,0,0">
+                  <Button x:Name="CopyYouTubeDescriptionButton" DockPanel.Dock="Right" Content="SALIN DESKRIPSI" Padding="8,3" Click="CopyYouTubeDescriptionButton_Click" />
+                  <TextBlock x:Name="YouTubeDescriptionCountText" Text="0 / 5000" VerticalAlignment="Center" />
+                </DockPanel>
+              </StackPanel>
+            </Expander>
           </StackPanel>
         </ScrollViewer>
       </GroupBox>

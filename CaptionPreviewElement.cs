@@ -34,7 +34,9 @@ public sealed class CaptionPreviewElement : FrameworkElement
         var sampleWords = CaptionTextCase.Transform(string.Join(' ', SampleWords), _style.TextCase)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var groups = CaptionLayout.Group(sampleWords, word => word, maxChars, _style.MaxLines);
-        var lines = groups.FirstOrDefault() ?? [["INI"]];
+        var lines = _style.WordByWord
+            ? new List<List<string>> { new() { "AKTIF" } }
+            : groups.FirstOrDefault() ?? new List<List<string>> { new() { "INI" } };
         var weight = _style.FontBold ? FontWeights.Bold : FontWeights.Normal;
         var slant = _style.FontItalic ? FontStyles.Italic : FontStyles.Normal;
         var typeface = new Typeface(_fontFamily, slant, weight, FontStretches.Normal);
@@ -65,10 +67,19 @@ public sealed class CaptionPreviewElement : FrameworkElement
             for (var wordIndex = 0; wordIndex < words.Count; wordIndex++)
             {
                 var word = words[wordIndex];
+                var isActive = word.Equals(CaptionTextCase.Transform("aktif", _style.TextCase), StringComparison.OrdinalIgnoreCase)
+                    && _style.HighlightEnabled;
+                if (isActive && _style.HighlightMode == "box")
+                {
+                    var padding = 5 * scale;
+                    var boxHeight = Math.Max(fontSize * 0.92, fontSize * 0.7);
+                    var box = new Rect(x - padding, lineCenter - boxHeight / 2, wordWidths[wordIndex] + padding * 2, boxHeight);
+                    drawingContext.DrawRoundedRectangle(highlight, null, box, 2.5 * scale, 2.5 * scale);
+                }
+                var wordBrush = isActive && _style.HighlightMode != "box" ? highlight : primary;
                 if (tracking == 0)
                 {
-                    DrawGlyph(word, x, lineCenter, word.Equals(CaptionTextCase.Transform("aktif", _style.TextCase), StringComparison.OrdinalIgnoreCase) && _style.HighlightEnabled ? highlight : primary,
-                        typeface, fontSize, pixelsPerDip, outline, drawingContext);
+                    DrawGlyph(word, x, lineCenter, wordBrush, typeface, fontSize, pixelsPerDip, outline, drawingContext);
                     x += wordWidths[wordIndex];
                 }
                 else
@@ -76,8 +87,7 @@ public sealed class CaptionPreviewElement : FrameworkElement
                     for (var characterIndex = 0; characterIndex < word.Length; characterIndex++)
                     {
                         var glyph = word[characterIndex].ToString();
-                        DrawGlyph(glyph, x, lineCenter, word.Equals(CaptionTextCase.Transform("aktif", _style.TextCase), StringComparison.OrdinalIgnoreCase) && _style.HighlightEnabled ? highlight : primary,
-                            typeface, fontSize, pixelsPerDip, outline, drawingContext);
+                        DrawGlyph(glyph, x, lineCenter, wordBrush, typeface, fontSize, pixelsPerDip, outline, drawingContext);
                         x += Measure(glyph, typeface, fontSize, pixelsPerDip);
                         if (characterIndex + 1 < word.Length) x += tracking;
                     }
@@ -110,12 +120,22 @@ public sealed class CaptionPreviewElement : FrameworkElement
         new FormattedText(text, CultureInfo.CurrentUICulture, WpfFlowDirection.LeftToRight,
             typeface, fontSize, WpfBrushes.White, pixelsPerDip).WidthIncludingTrailingWhitespace;
 
-    private static WpfBrush PreviewColor(string value) => value switch
+    private static WpfBrush PreviewColor(string value)
     {
-        "Yellow" => new SolidColorBrush(WpfColor.FromRgb(255, 211, 41)),
-        "Cyan" => new SolidColorBrush(WpfColor.FromRgb(70, 230, 235)),
-        "Pink" => new SolidColorBrush(WpfColor.FromRgb(255, 79, 163)),
-        "Red" => new SolidColorBrush(WpfColor.FromRgb(255, 90, 75)),
-        _ => WpfBrushes.White
-    };
+        var color = value switch
+        {
+            "Yellow" => WpfColor.FromRgb(255, 211, 41),
+            "Pink" => WpfColor.FromRgb(255, 79, 163),
+            "Red" => WpfColor.FromRgb(255, 90, 75),
+            _ => WpfBrushes.White.Color
+        };
+        if (value.Length == 7 && value[0] == '#'
+            && byte.TryParse(value.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var red)
+            && byte.TryParse(value.AsSpan(3, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var green)
+            && byte.TryParse(value.AsSpan(5, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var blue))
+            color = WpfColor.FromRgb(red, green, blue);
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
 }

@@ -14,9 +14,10 @@
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20261107" ExcludeAssets="analyzers" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20261107" />
     <Content Include="SKILL.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include=".gemini\skills\clipper\SKILL.md" Link=".gemini\skills\clipper\SKILL.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include=".gemini\skills\clipper-ringkas\SKILL.md" Link=".gemini\skills\clipper-ringkas\SKILL.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="README.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="HOW-TO-USE.md" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="models\haarcascade_frontalface_default.xml" Link="tools\models\haarcascade_frontalface_default.xml" CopyToOutputDirectory="PreserveNewest" Condition="Exists('models\haarcascade_frontalface_default.xml')" />
     <Content Include="models\LICENSE-OpenCV.txt" Link="tools\models\LICENSE-OpenCV.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

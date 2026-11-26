@@ -4,18 +4,28 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$tag = if ($Version.StartsWith('v')) { $Version } else { "v$Version" }
-$folderName = "Clipper98-$tag"
-$stage = Join-Path $repoRoot $folderName
+$versionNumber = $Version.TrimStart('v')
+$tag = "v$versionNumber"
+$publishDir = Join-Path $repoRoot 'artifacts\publish'
+$installerDir = Join-Path $repoRoot 'artifacts\installer'
+$iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 
-& (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $tag
-
-& (Join-Path $PSScriptRoot 'Download-Tools.ps1') -TargetDir $stage
-
-$model = Join-Path $stage 'tools\models\ggml-large-v3-turbo.bin'
-if ((Get-Item -LiteralPath $model).Length -lt 1400000000) {
-    throw 'Ukuran model Large-v3-Turbo tidak sesuai; folder release belum siap.'
+if (-not $iscc) {
+    throw 'Inno Setup Compiler (ISCC.exe) tidak ditemukan. Install Inno Setup untuk membuat installer secara lokal.'
 }
 
-Write-Host "Folder Clipper98 lokal siap: $stage"
-Write-Host 'Tidak ada tools, model, ZIP, atau executable yang diunggah ke GitHub.'
+& (Join-Path $PSScriptRoot 'Build-Clipper98.ps1') -Version $versionNumber
+New-Item -ItemType Directory -Path $installerDir -Force | Out-Null
+$installerPath = Join-Path $installerDir "Clipper98-Setup-$tag.exe"
+$publishDirDefine = '/DPublishDir="' + $publishDir + '"'
+$outputDirDefine = '/DOutputDir="' + $installerDir + '"'
+& $iscc.Source "/DAppVersion=$versionNumber" $publishDirDefine $outputDirDefine `
+    (Join-Path $repoRoot 'installer\Clipper98.iss')
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup gagal membuat installer (exit code $LASTEXITCODE)." }
+if (-not (Test-Path -LiteralPath $installerPath)) {
+    throw "Installer tidak ditemukan setelah build: $installerPath"
+}
+
+$size = (Get-Item -LiteralPath $installerPath).Length
+Write-Host "Installer siap: $installerPath ($([math]::Round($size / 1MB)) MiB)."
+Write-Host 'Paket tidak memuat yt-dlp, FFmpeg, Whisper CLI, atau model Whisper; Clipper mengunduhnya sesuai kebutuhan di PC pengguna.'

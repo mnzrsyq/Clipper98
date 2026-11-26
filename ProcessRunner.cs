@@ -32,7 +32,8 @@ public static class ProcessRunner
         IEnumerable<string> arguments,
         string? workingDirectory = null,
         Action<string>? onLine = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IEnumerable<string>? additionalPath = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -48,9 +49,13 @@ public static class ProcessRunner
         };
         var toolsDirectory = Path.Combine(AppContext.BaseDirectory, "tools");
         var currentPath = info.Environment["PATH"] ?? string.Empty;
+        var extraPath = additionalPath?.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? [];
         if (!currentPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Contains(toolsDirectory, StringComparer.OrdinalIgnoreCase))
             info.Environment["PATH"] = toolsDirectory + Path.PathSeparator + currentPath;
+        if (extraPath.Length > 0)
+            info.Environment["PATH"] = string.Join(Path.PathSeparator, extraPath)
+                + Path.PathSeparator + (info.Environment["PATH"] ?? string.Empty);
         // ArgumentList mengurus quoting Windows sendiri, jadi tidak ada lagi Q() manual.
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
 

@@ -115,6 +115,18 @@ public static class CaptionWriter
                 ? wordStarts[scheduledWords[i + 1]]
                 : null;
 
+        if (style.WordByWord)
+        {
+            foreach (var word in scheduledWords)
+            {
+                var start = wordStarts[word];
+                var end = VisibleEnd(word, nextWordStarts[word], start);
+                var text = FormatLine([word], style.HighlightEnabled ? word : null, style);
+                writer.WriteLine($"Dialogue: 0,{AssTime(start)},{AssTime(end)},Default,,0,0,0,,{{\\pos(540,{positionY})}}{text}");
+            }
+            return;
+        }
+
         foreach (var block in blocks)
         {
             var lines = block.Lines;
@@ -125,7 +137,7 @@ public static class CaptionWriter
                 for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                 {
                     var line = lines[lineIndex];
-                    var text = FormatLine(line, null, style.HighlightColor);
+                    var text = FormatLine(line, null, style);
                     var rowY = CaptionLayout.LinePositionY(positionY, lineIndex, lines.Count, style.FontSize, style.LineSpacing);
                     writer.WriteLine($"Dialogue: 0,{AssTime(wordStarts[groupWords[0]])},{AssTime(groupEnd)},Default,,0,0,0,,{{\\pos(540,{rowY})}}{text}");
                 }
@@ -140,7 +152,7 @@ public static class CaptionWriter
                 for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                 {
                     var line = lines[lineIndex];
-                    var text = FormatLine(line, word, style.HighlightColor);
+                    var text = FormatLine(line, word, style);
                     var rowY = CaptionLayout.LinePositionY(positionY, lineIndex, lines.Count, style.FontSize, style.LineSpacing);
                     writer.WriteLine($"Dialogue: 0,{AssTime(start)},{AssTime(end)},Default,,0,0,0,,{{\\pos(540,{rowY})}}{text}");
                 }
@@ -150,7 +162,7 @@ public static class CaptionWriter
 
     private sealed record CaptionBlock(List<List<SubtitleWord>> Lines, List<SubtitleWord> Words);
 
-    private static string FormatLine(IReadOnlyList<SubtitleWord> line, SubtitleWord? highlightedWord, string highlightColor)
+    private static string FormatLine(IReadOnlyList<SubtitleWord> line, SubtitleWord? highlightedWord, CaptionStyle style)
     {
         var result = new StringBuilder();
         for (var i = 0; i < line.Count; i++)
@@ -160,7 +172,17 @@ public static class CaptionWriter
 
             var escaped = AssEscape(word);
             if (ReferenceEquals(line[i], highlightedWord))
-                result.Append($"{{\\c{AssColor(highlightColor)}&}}{escaped}{{\\c}}");
+            {
+                if (style.HighlightMode.Equals("box", StringComparison.OrdinalIgnoreCase))
+                {
+                    var border = Math.Clamp(style.FontSize * 0.16, 8, 28).ToString("0.##", CultureInfo.InvariantCulture);
+                    result.Append($"{{\\c{AssColor(style.TextColor)}&\\bord{border}&\\3c{AssColor(style.HighlightColor)}&\\shad0&}}{escaped}{{\\rDefault}}");
+                }
+                else
+                {
+                    result.Append($"{{\\c{AssColor(style.HighlightColor)}&}}{escaped}{{\\c}}");
+                }
+            }
             else
                 result.Append(escaped);
         }
@@ -196,14 +218,27 @@ public static class CaptionWriter
     private static string AssTime(double seconds) =>
         TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(@"h\:mm\:ss\.ff", CultureInfo.InvariantCulture);
 
-    private static string AssColor(string color) => color switch
+    private static string AssColor(string color)
     {
-        "Yellow" => "&H0029D3FF",
-        "Cyan" => "&H00EBE646",
-        "Pink" => "&H00A34FFF",
-        "Red" => "&H004B5AFF",
-        _ => "&H00FFFFFF"
-    };
+        var rgb = color switch
+        {
+            "Yellow" => (R: 255, G: 211, B: 41),
+            "Pink" => (R: 255, G: 79, B: 163),
+            "Red" => (R: 255, G: 90, B: 75),
+            _ => ParseHex(color) ?? (R: 255, G: 255, B: 255)
+        };
+        return $"&H00{rgb.B:X2}{rgb.G:X2}{rgb.R:X2}";
+    }
+
+    private static (int R, int G, int B)? ParseHex(string value)
+    {
+        if (value.Length != 7 || value[0] != '#'
+            || !int.TryParse(value.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var red)
+            || !int.TryParse(value.AsSpan(3, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var green)
+            || !int.TryParse(value.AsSpan(5, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var blue))
+            return null;
+        return (red, green, blue);
+    }
 
     private static string AssEscape(string text) =>
         text.Replace("\\", "\\\\").Replace("{", "\\{").Replace("}", "\\}").Replace("\r", " ").Replace("\n", "\\N");

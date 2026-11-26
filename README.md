@@ -1,28 +1,28 @@
 # Clipper98
 
-Clipper98 adalah aplikasi Windows untuk mengolah kandidat klip YouTube menjadi video vertikal dengan subtitle. Repo ini berisi sumber aplikasi dan skrip build untuk rilis lokal. Repo pengembangan utama: `Clipper-Project`.
+Clipper98 adalah aplikasi Windows untuk membuat klip pendek atau meringkas video panjang, dengan subtitle, framing, voice-over online, dan metadata YouTube.
 
-## Build rilis lokal
+## Instalasi
 
-1. Siapkan Windows, .NET 8 SDK x64, dan koneksi internet.
-2. Jalankan `Release-Clipper98.bat`.
-3. Skrip membuat atau memperbarui `Clipper98-v1.0.0` di PC tersebut, membangun ulang aplikasi self-contained, lalu memperbarui tools lokal. Model Whisper Large-v3-Turbo yang sudah valid akan dipakai kembali.
-4. Jalankan `Clipper98.exe` dari folder itu.
+Unduh `Clipper98-Setup-v1.0.0.exe` dari halaman [Releases](https://github.com/mnzrsyq/Clipper98/releases) lalu jalankan. Installer membawa .NET yang dibutuhkan, jadi PC pengguna tidak perlu memasang .NET Runtime terpisah. Aplikasi dipasang untuk akun Windows yang sedang dipakai.
 
-Untuk membangun aplikasi tanpa mengunduh tools, jalankan `Build-Clipper98.bat`; setelahnya jalankan `Download-Tools.bat` untuk mengisi folder rilis. Skrip tidak mengunggah executable, tools, model, atau ZIP ke GitHub. Model Whisper yang disiapkan hanya `ggml-large-v3-turbo.bin`.
+Saat fitur membutuhkannya, Clipper menyediakan unduhan tools dan model ke PC pengguna. Repo dan installer tidak menyertakan yt-dlp, FFmpeg, whisper.cpp, atau model Whisper. Model yang dipakai hanya Whisper Large-v3-Turbo.
 
-## Alur aplikasi
+## Update
 
-1. Tempel URL YouTube dan pilih jumlah klip.
-2. Klik `CALL SKILL`, lalu jalankan prompt dengan Gemini dan skill `@clipper`.
-3. Impor manifest `.py` dari Gemini. Aplikasi membaca manifest sebagai data dan tidak menjalankan kode Python.
-4. Pilih kandidat, atur framing dan subtitle, lalu buat klip.
+Unduh installer versi terbaru dari halaman Releases lalu jalankan di PC yang sama. Installer memakai lokasi yang sama dan memperbarui file aplikasi. Pengaturan, cache, serta tools dan model yang sudah diunduh tetap berada di PC.
 
-## Framing dan subtitle
+## Fitur
 
-- `Smart Crop` mengikuti wajah utama. Jika wajah tidak terdeteksi selama dua detik atau lebih, aplikasi menampilkan seluruh frame dengan latar blur.
-- Jika `Smart Crop` tidak dicentang, seluruh frame video tetap terlihat dengan latar blur.
-- Subtitle dapat memakai subtitle YouTube atau transkrip lokal dengan Whisper Large-v3-Turbo.
-- Pilihan font memakai font yang tersedia di Windows. Pengaturan subtitle mencakup kapitalisasi, warna, highlight kata, outline, posisi, dan jumlah baris.
+- Mode `Klip Pendek` dan `Ringkas Video` dengan prompt Gemini dan manifest yang dibaca sebagai data, tidak dieksekusi sebagai Python.
+- Subtitle dari YouTube atau Whisper Large-v3-Turbo.
+- Pilihan framing, Smart Crop, font Windows, subtitle perkata, warna dasar dan custom, highlight, serta preset.
+- Voice-over melalui Fish Audio S2.1 Pro Free atau Edge-TTS; Fish API key disimpan terenkripsi di pengaturan lokal.
+- Judul dan deskripsi siap salin untuk upload YouTube.
+- Cache untuk menghindari pengolahan ulang bagian yang tidak berubah.
 
-Tools dan model disimpan di PC masing-masing. Lihat [HOW-TO-USE.md](HOW-TO-USE.md) untuk panduan lengkap dan [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) untuk lisensi komponen.
+Panduan lengkap: [HOW-TO-USE.md](HOW-TO-USE.md). Skill Gemini: `.gemini/skills/clipper/SKILL.md` dan `.gemini/skills/clipper-ringkas/SKILL.md`.
+
+## Build dari source
+
+Untuk membangun sendiri di Windows, pasang .NET 8 SDK dan Inno Setup, lalu jalankan `Release-Clipper98.bat`. Ini hanya diperlukan untuk developer; pengguna installer tidak perlu memasang .NET.

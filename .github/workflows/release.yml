@@ -1,0 +1,48 @@
+name: Build and publish Clipper98 installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example 1.0.0
+        required: true
+        default: 1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build self-contained installer
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          } else {
+            $version = '${{ inputs.version }}'.TrimStart('v')
+          }
+          .\scripts\Release-Clipper98.ps1 -Version $version
+          "CLIPPER98_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = "artifacts/installer/Clipper98-Setup-v$env:CLIPPER98_VERSION.exe"
+          gh release create "v$env:CLIPPER98_VERSION" $installer `
+            --title "Clipper98 v$env:CLIPPER98_VERSION" `
+            --generate-notes

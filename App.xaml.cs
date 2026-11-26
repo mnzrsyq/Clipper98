@@ -49,13 +49,19 @@ public partial class App : System.Windows.Application
                     Reason = request.Clip.Reason,
                     Caption = request.Clip.Caption,
                     Hashtags = string.Join(" ", request.Clip.Hashtags),
-                    PreserveFullFrame = request.PreserveFullFrame
+                    PreserveFullFrame = request.PreserveFullFrame,
+                    KeptSegments = request.Segments
                 },
                 request.CaptionStyle,
                 request.OutputFolder,
                 request.Language,
                 request.SubtitleSource,
                 request.FramePngPath,
+                request.UseSubtitles,
+                request.PreserveSourceAspectRatio,
+                request.UseFourByFiveContentFrame,
+                request.UseNarration,
+                request.TtsOptions,
                 progress,
                 CancellationToken.None);
             progress.Report(JobProgress.Stage("OUTPUT:" + output));
