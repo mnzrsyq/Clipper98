@@ -1,7 +1,7 @@
 <h1 align="center">Clipper98</h1>
 
 <p align="center"><strong>Buat klip pendek atau ringkas video YouTube langsung di Windows.</strong><br>
-Pilih momen lewat Gemini CLI, impor manifest ke Clipper98, lalu unduh dan render videonya secara lokal.</p>
+Pilih momen lewat Gemini, impor manifest ke Clipper98, lalu unduh dan render videonya secara lokal.</p>
 
 <p align="center">
   <a href="https://github.com/mnzrsyq/Clipper98/blob/main/installer/Clipper98.iss"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6" alt="Platform: Windows x64"></a>
@@ -40,7 +40,7 @@ Pilih momen lewat Gemini CLI, impor manifest ke Clipper98, lalu unduh dan render
 | **Metadata YouTube** | Edit dan salin judul serta deskripsi untuk tiap klip. Clipper98 tidak mengunggah video ke YouTube. |
 | **Cache lokal** | Gunakan ulang video, transkrip, analisis framing, dan audio narasi yang masih cocok. Cache bisa dibersihkan dari aplikasi. |
 
-Gemini CLI atau Antigravity CLI membantu memilih momen dan membuat manifest. Clipper98 membaca file `.py` tersebut sebagai data sederhana; kode di dalam file tidak dijalankan.
+Gemini membantu memilih momen dan membuat manifest. Clipper98 membaca file `.py` tersebut sebagai data sederhana; kode di dalam file tidak dijalankan.
 
 ## Instalasi
 
@@ -63,13 +63,15 @@ Unduh installer terbaru dari [GitHub Releases](https://github.com/mnzrsyq/Clippe
 
 ## Cara pakai
 
-1. Tempel URL YouTube publik pada kolom **SOURCE URL**.
+Sebelum pertama kali memakai Clipper98, buat dua skill Gemini satu kali. Ikuti [panduan menyiapkan skill Gemini](docs/GEMINI-SKILLS.md); langkah ini tidak memerlukan upload file.
+
+1. Tempel URL YouTube publik pada kolom **SOURCE URL** di Clipper98.
 2. Pilih **Klip Pendek** untuk beberapa potongan mandiri, atau **Ringkas Video** untuk membuat satu video lebih pendek dari beberapa bagian sumber.
-3. Klik **PROMPT GEMINI**, lalu kirim prompt yang tersalin ke Gemini CLI atau Antigravity CLI dengan skill yang sesuai: `/clipper` atau `/clipper-ringkas`.
-4. Simpan manifest `.py` yang dihasilkan.
-5. Klik **IMPORT .PY** di Clipper98. Periksa kandidat, timestamp, dan narasi sebelum render.
-6. Atur subtitle, framing, dan folder hasil, lalu klik **CREATE CLIP**.
-7. Pantau **LOG PROSES**. Klik **OPEN FOLDER** untuk membuka hasil.
+3. Klik **PROMPT GEMINI**. Clipper98 menyalin prompt ke clipboard.
+4. Buka chat baru di [Gemini](https://gemini.google.com). Ketik `/`, pilih skill **clipper** untuk Klip Pendek atau **clipper-ringkas** untuk Ringkas Video, lalu tempel prompt yang disalin.
+5. Gemini menampilkan manifest dalam blok kode. Salin mulai dari `CLIPPER_JOB =` sampai kurung penutupnya saja. Buka Notepad, tempel isi tersebut, lalu pilih **Save as**. Simpan dengan nama berakhiran `.py`, misalnya `clipper_job.py`. Pada **Save as type** atau **Jenis file**, pilih **All files** agar file tidak tersimpan sebagai `.py.txt`.
+6. Kembali ke Clipper98, klik **IMPORT .PY**, lalu pilih file yang baru disimpan. Periksa kandidat, timestamp, dan narasi sebelum render.
+7. Atur subtitle, framing, dan folder hasil, lalu klik **CREATE CLIP**. Pantau **LOG PROSES**; klik **OPEN FOLDER** untuk membuka hasil.
 
 Pada mode **Klip Pendek**, jumlah kandidat dimasukkan sebelum prompt dibuat. Setelah impor, pilih kandidat yang ingin dirender. Pada **Ringkas Video**, periksa urutan bagian yang dipertahankan dan narasi jika voice-over diaktifkan.
 
@@ -103,7 +105,7 @@ Voice-over hanya tersedia pada Ringkas Video. Pilih Edge-TTS atau Fish Audio di 
 
 ### Apakah Clipper98 memerlukan API key Gemini?
 
-Clipper98 tidak memanggil Gemini secara langsung. Gemini CLI atau Antigravity CLI digunakan untuk membuat manifest kandidat. Clipper98 kemudian mengunduh dan merender video di PC.
+Clipper98 tidak memanggil Gemini secara langsung dan tidak memerlukan API key Gemini. Pengguna memakai aplikasi Gemini untuk membuat manifest; Clipper98 kemudian mengunduh dan merender video di PC.
 
 ### Apakah Clipper98 mengunggah video ke YouTube?
 
@@ -125,6 +127,10 @@ Hasil masuk ke folder output yang dipilih, dengan default `Videos\Clipper98`. Ca
 
 Buka **SETUP** lalu pilih **UNDUH KOMPONEN KURANG**. Clipper98 mengunduh tools atau model yang belum ada.
 
+### Skill Gemini tidak muncul di daftar?
+
+Buka **Customize** > **Skills** dan pastikan skill sudah dibuat serta aktif. Lihat [panduan setup Gemini](docs/GEMINI-SKILLS.md) untuk langkah lengkap.
+
 ## Build dari source
 
 Build dan installer saat ini ditujukan untuk Windows x64.
@@ -140,7 +146,7 @@ Set-Location Clipper98
 Untuk membangun installer, jalankan dari PowerShell di root repo. Ganti nilai versi dengan versi yang akan dirilis:
 
 ```powershell
-.\Release-Clipper98.bat -Version "1.0.0"
+.\Release-Clipper98.bat -Version "1.0.2"
 ```
 
 Build menghasilkan file di `artifacts\publish`; installer dibuat di `artifacts\installer`. Folder `tools` dan model tidak disertakan dalam paket rilis. Untuk alur publikasi GitHub, workflow `.github/workflows/release.yml` membuat installer dan GitHub Release saat tag `v*` didorong.
@@ -156,7 +162,10 @@ Build menghasilkan file di `artifacts\publish`; installer dibuat di `artifacts\i
 | `Caption*.cs`, `Subtitle*.cs`, `SmartCropAnalyzer.cs` | Pembuatan subtitle, styling caption, dan analisis framing wajah. |
 | `scripts/` | Script build, release, dan unduhan tools untuk developer. |
 | `installer/` | Konfigurasi Inno Setup. |
-| `.gemini/skills/` | Skill Gemini CLI untuk Klip Pendek dan Ringkas Video. |
+| `HOW-TO-USE.md` | Panduan penggunaan yang ikut disertakan pada aplikasi. |
+| `.gemini/skills/` | Instruksi skill untuk mode Klip Pendek dan Ringkas Video. |
+| `docs/GEMINI-SKILLS.md` | Panduan membuat skill Gemini secara manual. |
+| `docs/gemini/` | Teks instruksi siap salin untuk field Instructions Gemini. |
 | `.github/workflows/release.yml` | Build dan publikasi installer dari tag release. |
 | `THIRD-PARTY-NOTICES.md` | Catatan lisensi komponen pihak ketiga. |
 

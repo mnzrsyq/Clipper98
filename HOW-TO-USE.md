@@ -1,50 +1,47 @@
 # Cara Menggunakan Clipper98
 
-## Instal dan update
+Clipper98 membuat video dari URL YouTube. Gemini membantu memilih bagian video dan menyiapkan manifest; Clipper98 yang mengunduh dan merender video di PC.
 
-1. Buka halaman [Releases Clipper98](https://github.com/mnzrsyq/Clipper98/releases).
-2. Unduh `Clipper98-Setup-v1.0.0.exe`, lalu jalankan. Installer memasang aplikasi beserta .NET yang diperlukan; pengguna tidak perlu memasang .NET sendiri.
-3. Jalankan `Clipper98` dari Start Menu atau shortcut Desktop.
-4. Untuk update, unduh installer versi terbaru dan jalankan. Pengaturan, cache, serta tools yang sudah diunduh disimpan di PC dan tetap tersedia.
+## Persiapan Gemini
 
-Pada penggunaan pertama, buka `SETUP` lalu pilih `UNDUH KOMPONEN KURANG`. Tools diunduh ke PC masing-masing. Whisper Large-v3-Turbo sekitar 1,5 GiB dan hanya diunduh jika belum tersedia. Installer dan repository GitHub tidak menyertakan tools atau model besar.
-
-## Masukkan video dan kandidat
-
-1. Tempel URL YouTube publik pada kolom `SOURCE URL`.
-2. Pilih mode `Klip Pendek` untuk beberapa potongan mandiri atau `Ringkas Video` untuk satu video panjang yang dipendekkan dengan membuang bagian tertentu.
-3. Pada `Ringkas Video`, pilih target durasi dan rasio. `Vertikal 9:16 · isi 4:5` memakai konten 4:5 dengan ruang atas-bawah berisi background blur. Subtitle dan VO dapat diatur masing-masing.
-4. Klik `PROMPT GEMINI`, lalu jalankan skill `/clipper` atau `/clipper-ringkas` sesuai mode. Simpan manifest `.py` dari Gemini.
-5. Klik `IMPORT .PY`. Clipper membaca manifest sebagai data dan tidak menjalankan kode Python di dalamnya.
-6. Pada `Klip Pendek`, pilih kandidat yang ingin dibuat. Di kedua mode, periksa timestamp dan narasi sebelum render.
-
-## Voice-over
-
-1. Centang `Tambahkan narasi VO`.
-2. Pada `PENGATURAN SUARA`, pilih `Fish Audio S2.1 Pro Free` atau `Edge-TTS`.
-3. Untuk Fish Audio, tempel API key di kolom yang tersedia. Key disimpan terenkripsi di pengaturan Windows lokal, tidak di manifest.
-4. Pilih suara, lalu atur laju, volume narasi, volume audio asli, dan pitch.
-
-Narasi yang cocok akan dipakai dari cache. Fish Audio dan Edge-TTS memerlukan internet.
-
-## Framing dan subtitle
-
-- Centang `Smart Crop` agar crop vertikal mengikuti wajah utama. Jika wajah tak terdeteksi selama dua detik, bagian itu memakai full frame dengan latar blur.
-- Tanpa Smart Crop, seluruh frame terlihat dengan latar blur.
-- Pilih sumber transkrip `Otomatis — subtitle YouTube` atau `Whisper — transkrip ulang`. Jika subtitle YouTube tidak tersedia, aplikasi memakai Whisper Large-v3-Turbo.
-- Pilih font yang terpasang di Windows, kapitalisasi, warna, highlight, outline, jumlah baris, dan posisi subtitle. Simpan pengaturan sebagai preset untuk digunakan kembali.
-- Preview utama memakai thumbnail statis; hasil final dirender dari video sumber.
-
-## Metadata YouTube
-
-Pada panel `UPLOAD YOUTUBE`, periksa judul dan deskripsi. Judul dibatasi 100 karakter. Hashtag disimpan di baris terakhir deskripsi. Gunakan tombol salin untuk menempelkan keduanya ke YouTube Studio.
+Buat skill Gemini **clipper** dan **clipper-ringkas** satu kali. Ikuti [Panduan Skill Gemini](https://github.com/mnzrsyq/Clipper98/blob/main/docs/GEMINI-SKILLS.md). Panduan itu memakai menu **Create manually**, jadi tidak perlu mengunggah file.
 
 ## Buat video
 
-1. Pilih kandidat yang akan dibuat atau periksa daftar bagian yang dipertahankan untuk mode `Ringkas Video`.
-2. Pilih folder hasil jika diperlukan.
-3. Klik `CREATE CLIP`, pantau `LOG PROSES`, lalu klik `OPEN FOLDER` saat selesai.
+1. Buka Clipper98. Tempel URL video YouTube publik ke kolom **SOURCE URL**.
+2. Pilih **Klip Pendek** untuk membuat beberapa potongan mandiri, atau **Ringkas Video** untuk membuat satu video pendek dari bagian-bagian yang dipertahankan.
+3. Atur jumlah kandidat pada **Klip Pendek**. Pada **Ringkas Video**, atur target durasi dan pilihan narasi jika diperlukan.
+4. Klik **PROMPT GEMINI**. Clipper98 menyalin prompt ke clipboard.
+5. Buka chat baru di [Gemini](https://gemini.google.com). Ketik `/`, pilih skill **clipper** atau **clipper-ringkas** sesuai mode, lalu tempel prompt yang disalin.
+6. Salin isi manifest yang ditampilkan Gemini, mulai dari `CLIPPER_JOB =` sampai kurung penutupnya. Jangan salin teks di luar blok kode. Buka Notepad dan tempel isinya.
+7. Di Notepad, pilih **Save as**. Beri nama file dengan akhiran `.py`, contohnya `clipper_job.py`. Pilih **All files** pada tipe file dan simpan.
+8. Kembali ke Clipper98, klik **IMPORT .PY**, lalu pilih file tadi. Jika berhasil, daftar kandidat atau bagian video akan muncul.
+9. Periksa timestamp, pilihan klip, subtitle, framing, dan narasi. Klik **CREATE CLIP** untuk mulai merender.
+10. Pantau **LOG PROSES**. Klik **OPEN FOLDER** setelah proses selesai untuk melihat hasilnya.
 
-Segmen, transkrip, analisis framing, dan audio narasi disimpan di cache lokal agar perubahan subtitle atau framing tidak selalu memproses ulang semuanya. `HAPUS TEMP/CACHE` membersihkan cache; hasil video dan pengaturan tetap tersimpan.
+Simpan hanya isi manifest, mulai dari `CLIPPER_JOB =` sampai kurung penutup terakhir. Jangan ikut menyalin teks penjelasan Gemini. Pastikan file berakhiran `.py`, bukan `.py.txt`.
 
-Skill Gemini ada di `.gemini/skills/clipper/SKILL.md` dan `.gemini/skills/clipper-ringkas/SKILL.md`. Jika Gemini CLI terbuka saat skill berubah, jalankan `/skills reload`.
+## Atur hasil
+
+- Pada **Klip Pendek**, pilih kandidat yang ingin dirender dan atur subtitle atau framing.
+- Pada **Ringkas Video**, periksa urutan bagian yang dipertahankan. Voice-over tersedia sebagai pilihan.
+- **Smart Crop** mengikuti wajah bila terdeteksi. Tanpa Smart Crop, Clipper98 menampilkan seluruh frame dengan latar blur pada output vertikal.
+- Folder hasil bisa diubah dari aplikasi. Default-nya `Videos\Clipper98`.
+- Untuk subtitle, pilih **Otomatis** atau **Whisper**. Jika subtitle YouTube tidak tersedia dan subtitle aktif, Clipper98 dapat memakai Whisper Large-v3-Turbo.
+- **HAPUS TEMP/CACHE** membersihkan cache lokal tanpa menghapus hasil video atau pengaturan.
+
+## Jika manifest tidak bisa diimpor
+
+Pastikan file hanya berisi manifest, tidak ada pagar blok kode atau penjelasan Gemini, lalu simpan ulang sebagai file `.py` dengan tipe **All files**. Jika Gemini memotong jawabannya, minta Gemini mengirim ulang seluruh manifest dalam satu blok kode Python sebelum menyimpannya.
+
+## Voice-over
+
+Voice-over tersedia pada **Ringkas Video**. Di **PENGATURAN SUARA**, pilih Fish Audio atau Edge-TTS. Fish Audio memerlukan API key; Clipper98 menyimpan key terenkripsi pada akun Windows lokal. Kedua layanan memerlukan koneksi internet.
+
+## Instal dan update
+
+1. Buka [GitHub Releases](https://github.com/mnzrsyq/Clipper98/releases).
+2. Unduh installer terbaru bernama `Clipper98-Setup-vX.Y.Z.exe`, lalu jalankan.
+3. Untuk update, jalankan installer terbaru di PC yang sama. Pengaturan, cache, tools, dan model yang sudah diunduh tetap tersimpan.
+
+Pada penggunaan pertama, buka **SETUP** lalu pilih **UNDUH KOMPONEN KURANG**. Clipper98 mengunduh komponen yang diperlukan ke PC. Model Whisper Large-v3-Turbo sekitar 1,5 GiB dan hanya diunduh jika belum tersedia serta diperlukan.

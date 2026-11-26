@@ -74,9 +74,9 @@ public partial class MainWindow : Window
         var prompt = BuildSkillPrompt(url);
         System.Windows.Clipboard.SetText(prompt);
         SetStatus(IsCondensedMode
-            ? "STATUS: prompt Ringkas Video tersalin. Panggil /clipper-ringkas di Gemini CLI."
-            : "STATUS: prompt klip pendek tersalin. Panggil /clipper di Gemini CLI.");
-        WriteLog(IsCondensedMode ? "Prompt /clipper-ringkas disalin untuk meringkas video." : "Prompt /clipper disalin untuk membuat klip pendek.");
+            ? "STATUS: Prompt Ringkas Video tersalin. Pilih skill /clipper-ringkas di Gemini, lalu tempel prompt."
+            : "STATUS: Prompt Klip Pendek tersalin. Pilih skill /clipper di Gemini, lalu tempel prompt.");
+        WriteLog(IsCondensedMode ? "Prompt Ringkas Video disalin untuk Gemini." : "Prompt Klip Pendek disalin untuk Gemini.");
     }
 
     private string BuildSkillPrompt(string url)
@@ -86,13 +86,13 @@ public partial class MainWindow : Window
             var seconds = int.TryParse(SelectedText(TargetDurationBox, "0"), out var value) ? value : 0;
             var narration = CondensedNarrationCheckBox.IsChecked == true ? "on" : "off";
             return seconds == 0
-                ? $"/clipper-ringkas {url} target_duration_seconds=0 narration={narration} Ringkas video ini menjadi satu video utuh lebih pendek dengan membuang bagian yang tidak perlu tanpa mempercepat. Jaga alur visual dan audio, buat narasi VO yang natural hanya jika diminta, dan selalu sertakan judul serta deskripsi YouTube."
-                : $"/clipper-ringkas {url} target_duration_seconds={seconds} narration={narration} Ringkas video ini menjadi satu video utuh sekitar {seconds / 60} menit tanpa mempercepat. Jika target merusak alur, pertahankan konteks dan sarankan durasi lebih panjang. Buat narasi VO yang natural hanya jika diminta dan selalu sertakan judul serta deskripsi YouTube.";
+                ? $"{url}\ntarget_duration_seconds=0 narration={narration}\nRingkas video ini menjadi satu video utuh lebih pendek dengan membuang bagian yang tidak perlu tanpa mempercepat. Jaga alur visual dan audio. Buat narasi VO yang natural hanya jika diminta, lalu sertakan judul dan deskripsi YouTube."
+                : $"{url}\ntarget_duration_seconds={seconds} narration={narration}\nRingkas video ini menjadi satu video utuh sekitar {seconds / 60} menit tanpa mempercepat. Jika target merusak alur, pertahankan konteks dan sarankan durasi lebih panjang. Buat narasi VO yang natural hanya jika diminta, lalu sertakan judul dan deskripsi YouTube.";
         }
 
         var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 5;
         CandidateCountBox.Text = requested.ToString();
-        return $"/clipper {url} Buatkan Klip Viral sebanyak {requested} klip. Untuk setiap kandidat, sertakan judul YouTube maksimal 100 karakter, deskripsi siap tempel, dan maksimal 3 hashtag relevan.";
+        return $"{url}\nrequested_candidate_count={requested}\nPilih {requested} kandidat klip pendek yang mandiri. Untuk setiap kandidat, sertakan judul YouTube maksimal 100 karakter, deskripsi siap tempel, dan maksimal 3 hashtag relevan.";
     }
 
     private bool IsCondensedMode => SelectedText(ProcessingModeBox, "short_clips") == "condense";
@@ -257,7 +257,7 @@ public partial class MainWindow : Window
     {
         var dialog = new WpfOpenFileDialog
         {
-            Title = "Pilih script kandidat dari Gemini CLI",
+            Title = "Pilih manifest .py dari Gemini",
             Filter = "Python Clipper job (*.py)|*.py|Semua file (*.*)|*.*",
             CheckFileExists = true,
             Multiselect = false
@@ -292,7 +292,7 @@ public partial class MainWindow : Window
             {
                 Title = string.IsNullOrWhiteSpace(loaded.Manifest.Source.Title) ? "Video YouTube" : loaded.Manifest.Source.Title,
                 Duration = loaded.Manifest.Source.DurationSeconds ?? 0,
-                TranscriptSource = "Gemini CLI"
+                TranscriptSource = "Gemini"
             };
             ClipList.ItemsSource = _clips;
             if (_clips.Count > 0) ClipList.SelectedIndex = 0;
@@ -300,17 +300,17 @@ public partial class MainWindow : Window
             WorkProgress.Value = 100;
             SetStatus(loaded.Manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase)
                 ? $"STATUS: video ringkas dimuat; {_clips[0].KeptSegments.Count} bagian akan disambung."
-                : $"STATUS: {_clips.Count} kandidat dimuat dari Gemini CLI.");
+                : $"STATUS: {_clips.Count} kandidat dimuat dari Gemini.");
             ClipDetail.Text = loaded.Manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase)
                 ? BuildCondensedDetail(_clips[0])
-                : $"File: {Path.GetFileName(dialog.FileName)}\nJudul: {_scan.Title}\nTimestamp diedit di sini akan disimpan kembali ke script.";
+                : $"File: {Path.GetFileName(dialog.FileName)}\nJudul: {_scan.Title}\nTimestamp yang diedit di sini akan disimpan kembali ke manifest.";
             WriteLog($"Manifest Gemini dimuat: {dialog.FileName}");
         }
         catch (Exception ex)
         {
             SetStatus("STATUS: file Gemini tidak bisa dimuat.", true);
             WriteLog("ERROR: " + ex.Message);
-            WpfMessageBox.Show(ex.Message, "Import script Gemini", MessageBoxButton.OK, MessageBoxImage.Warning);
+            WpfMessageBox.Show(ex.Message, "Import manifest Gemini", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {

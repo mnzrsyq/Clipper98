@@ -14,7 +14,7 @@ public static class ClipperJobScript
         var source = File.ReadAllText(path).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
         var assignment = Assignment.Match(source);
         if (!assignment.Success)
-            throw new InvalidOperationException("File tidak memakai format CLIPPER_JOB. Pastikan skill @clipper terbaru membuat manifest Clipper 98.");
+            throw new InvalidOperationException("File tidak memakai format CLIPPER_JOB. Pastikan skill Clipper terbaru membuat manifest untuk Clipper98.");
 
         var literal = source[assignment.Length..].Trim();
         try

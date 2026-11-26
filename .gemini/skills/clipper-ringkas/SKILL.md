@@ -1,13 +1,13 @@
 ---
 name: clipper-ringkas
-description: Menganalisis video YouTube panjang, memilih bagian yang dipertahankan untuk satu video ringkas, dan bila diminta menulis narasi VO yang nyambung dengan potongan. Gunakan saat pengguna meminta Ringkas Video atau memendekkan video panjang tanpa mempercepat.
+description: Memilih bagian penting dari video YouTube panjang untuk membuat satu versi lebih pendek, dengan opsi narasi VO, lalu menyusun manifest Clipper98. Gunakan saat ingin meringkas satu video tanpa mempercepatnya.
 ---
 
 # Clipper Ringkas Video
 
 ## Tujuan
 
-Buat satu manifest untuk satu video ringkas. Aplikasi Clipper 98 mengunduh bagian yang dipertahankan, menyambungkannya dalam urutan asli pada kecepatan normal, lalu dapat menambahkan subtitle dan narasi TTS lokal/online sesuai opsi pengguna. Skill ini berbeda dari `clipper`, yang memilih beberapa klip pendek mandiri.
+Buat satu manifest untuk satu video ringkas. Aplikasi Clipper98 mengunduh bagian yang dipertahankan, menyambungkannya dalam urutan asli pada kecepatan normal, lalu dapat menambahkan subtitle dan narasi TTS lokal/online sesuai opsi pengguna. Skill ini berbeda dari `clipper`, yang memilih beberapa klip pendek mandiri. Pengguna memilih skill ini di Gemini, lalu menempel prompt yang disalin dari aplikasi.
 
 ## Alur kerja
 
@@ -22,7 +22,7 @@ Buat satu manifest untuk satu video ringkas. Aplikasi Clipper 98 mengunduh bagia
 9. Jika `narration=off`, isi `narration` setiap bagian dengan string kosong. Jangan membuat teks VO.
 10. Selalu buat judul dan deskripsi siap tempel untuk unggahan YouTube berdasarkan keseluruhan video ringkas. Judul maksimal 100 karakter. Deskripsi boleh lebih panjang, maksimal 5.000 karakter, dan menempatkan maksimal 3 hashtag relevan pada baris terakhir.
 11. Target durasi adalah perkiraan, bukan batas keras. Jangan memaksa target yang merusak alur atau menghilangkan tahap penting. Nyatakan durasi yang lebih sesuai di `condensed_summary` bila perlu.
-12. Buat manifest Python data-saja di `clipper_jobs/clipper_job_<video_id>.py`. Laporkan jumlah bagian, perkiraan durasi akhir, judul, dan lokasi manifest. Jangan mengklaim video telah dirender.
+12. Buat manifest Python data-saja dan tampilkan sebagai satu blok kode Python di chat. Isi blok kode hanya satu assignment `CLIPPER_JOB`, tanpa penjelasan atau teks tambahan. Laporkan jumlah bagian, perkiraan durasi akhir, dan judul. Minta pengguna menyalin isi blok kode tanpa tanda pagar pembuka/penutup, menyimpannya sebagai file `.py`, lalu mengimpornya ke Clipper98. Jangan mengklaim file sudah disimpan atau video telah dirender.
 
 ## Format manifest wajib
 

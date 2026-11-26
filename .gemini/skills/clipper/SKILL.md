@@ -1,6 +1,6 @@
 ---
 name: clipper
-description: Memilih momen mandiri dari video YouTube dan membuat manifest short_clips yang dapat diimpor ke Clipper 98.
+description: Memilih beberapa momen pendek mandiri dari video YouTube dan menyusun manifest yang dapat diimpor ke Clipper98. Gunakan saat ingin membuat kandidat Shorts, Reels, atau TikTok dari URL YouTube.
 ---
 
 # Clipper 98
@@ -9,7 +9,7 @@ description: Memilih momen mandiri dari video YouTube dan membuat manifest short
 
 Saat pengguna memberikan URL YouTube melalui prompt Clipper, pilih beberapa momen mandiri untuk Shorts, Reels, atau TikTok. Hasil skill ini hanya manifest kandidat untuk diimpor ke aplikasi Clipper 98. Aplikasi lokal yang akan mengunduh, memotong, membuat subtitle, dan merender video.
 
-Skill ini untuk mode **Klip Pendek** Clipper98 dan dapat digunakan dari Gemini CLI maupun Antigravity CLI. Ikuti URL dan jumlah kandidat pada prompt aplikasi. Jumlah itu target, bukan syarat bahwa nilai `requested_candidate_count` harus sama dengan banyaknya item `clips_data`. Clipper98 menerima 1–20 item yang valid; jangan menambah momen lemah hanya untuk menyamakan jumlah.
+Skill ini untuk mode **Klip Pendek** Clipper98. Pengguna memilih skill ini di Gemini, lalu menempel prompt yang disalin dari aplikasi. Ikuti URL dan jumlah kandidat pada prompt aplikasi. Jumlah itu target, bukan syarat bahwa nilai `requested_candidate_count` harus sama dengan banyaknya item `clips_data`. Clipper98 menerima 1–20 item yang valid; jangan menambah momen lemah hanya untuk menyamakan jumlah.
 
 ## Alur kerja
 
@@ -19,9 +19,9 @@ Skill ini untuk mode **Klip Pendek** Clipper98 dan dapat digunakan dari Gemini C
 4. Mulai saat konteks yang dibutuhkan mulai, lalu akhiri setelah satu pikiran, jawaban, atau payoff selesai. Jangan masuk di tengah pikiran atau berhenti saat penjelasan masih berjalan.
 5. Prioritaskan klip berdurasi di bawah 60 detik. Klip tepat 60 detik boleh jika payoff selesai tepat di sana. Klip 61–100 detik hanya boleh dipakai jika konteks atau payoff belum selesai sebelum itu dan seluruh rentang tetap relevan. Jangan keluarkan klip di atas 100 detik. Jaga satu topik dan satu alur; potong segera setelah payoff selesai, jangan ikutkan obrolan yang melebar atau topik berikutnya, dan jangan memperpanjang klip demi memenuhi jumlah kandidat. Pastikan rentang berada di dalam video dan tidak tumpang tindih dengan kandidat lain.
 6. Urutkan kandidat dari potensi paling kuat. Tulis hook, alasan, caption, dan metadata YouTube khusus untuk tiap klip dalam bahasa utama video. Semua detail harus didukung isi yang benar-benar diperiksa. Jangan menambahkan nama, merek, spesifikasi, lokasi, tanggal, reaksi, atau hubungan sebab-akibat yang tidak terverifikasi.
-7. Buat satu manifest lengkap sesuai skema Clipper98 di bawah, lalu simpan langsung di folder `clipper_jobs` pada direktori kerja saat ini. Buat folder tersebut jika belum ada. Nama file: `clipper_job_<video_id>.py`. Tulis file langsung sebagai satu kesatuan, bukan sebagai jawaban panjang di chat.
-8. Baca kembali seluruh file yang tersimpan dan cocokkan dengan aturan validasi di bawah. Jika batas konteks atau panjang mengancam kelengkapan, hasilkan lebih sedikit kandidat; jangan pernah menyimpan file yang berhenti di tengah string atau struktur.
-9. Laporkan jumlah item aktual di `clips_data` dan path file. Jangan mengklaim video sudah diunduh atau dirender; itu dilakukan setelah manifest diimpor ke Clipper98.
+7. Buat satu manifest lengkap sesuai skema Clipper98 di bawah. Tampilkan seluruh assignment dalam satu blok kode Python di chat. Isi blok kode hanya manifest, tanpa penjelasan atau teks tambahan.
+8. Periksa ulang seluruh manifest dan cocokkan dengan aturan validasi di bawah. Jika batas konteks atau panjang mengancam kelengkapan, hasilkan lebih sedikit kandidat; jangan pernah mengirim manifest yang berhenti di tengah string atau struktur.
+9. Laporkan jumlah item aktual di `clips_data`. Minta pengguna menyalin isi blok kode tanpa tanda pagar pembuka/penutup, lalu menyimpannya sebagai file `.py` untuk diimpor ke Clipper98. Jangan mengklaim file sudah disimpan, video sudah diunduh, atau video sudah dirender.
 
 ## Cek batas
 
@@ -109,5 +109,4 @@ Sebelum menyerahkan, baca ulang isi file yang tersimpan dan pastikan:
 
 Jika pemeriksaan gagal, perbaiki file dan baca ulang. Jangan laporkan file yang belum lengkap atau belum dapat diimpor.
 
-Balas pengguna dalam bahasa Indonesia dengan ringkasan singkat dan lokasi manifest.
-
+Balas pengguna dalam bahasa Indonesia dengan jumlah kandidat dan petunjuk singkat untuk menyimpan blok kode sebagai file `.py`.
