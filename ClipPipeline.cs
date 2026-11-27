@@ -196,15 +196,57 @@ public sealed class ClipPipeline
         progress.Report(JobProgress.Stage(preserveSourceAspectRatio
             ? "Preserving the source aspect ratio..."
             : "Rendering 9:16 video..."));
+
+        var thumbnailPath = Path.ChangeExtension(output, ".jpg");
+        var heroSec = clip.HeroFrameSeconds ?? clip.Start;
+        var relativeHero = ThumbnailComposer.CalculateRelativeHeroTime(clip, heroSec);
+        var hookText = !string.IsNullOrWhiteSpace(clip.ThumbnailHook)
+            ? clip.ThumbnailHook
+            : (!string.IsNullOrWhiteSpace(clip.Hook) ? clip.Hook : "KLIP TERBAIK");
+
+        string? fontsDir = null;
+        if (!string.IsNullOrWhiteSpace(style.FontFilePath))
+            fontsDir = Path.Combine(job, "render-fonts");
+
         try
         {
-            await _renderer.RenderAsync(source, assFile, output, job, cropExpression, clip.PreserveFullFrame,
-                fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
-                useFourByFiveContentFrame, narrationTracks, ttsOptions, ct);
+            if (clip.EnableOpeningMotion && !preserveSourceAspectRatio)
+            {
+                progress.Report(JobProgress.Stage("Rendering Opening Video Motion Composite (2s)..."));
+                var openingMp4 = Path.Combine(job, "opening_motion.mp4");
+                await ThumbnailComposer.RenderOpeningMotionCompositeAsync(
+                    source, relativeHero, hookText, openingMp4, job, cropExpression,
+                    clip.PreserveFullFrame, style.FontName, fontsDir, ct);
+
+                progress.Report(JobProgress.Stage("Mengekstrak cover thumbnail statis dari puncak animasi Video Motion Composite..."));
+                await ThumbnailComposer.ExtractThumbnailFromMotionAsync(openingMp4, thumbnailPath, job, ct);
+
+                var mainRenderedMp4 = Path.Combine(job, "main_rendered.mp4");
+                await _renderer.RenderAsync(source, assFile, mainRenderedMp4, job, cropExpression, clip.PreserveFullFrame,
+                    fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
+                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct);
+
+                progress.Report(JobProgress.Stage("Menyatukan Opening Motion Composite ke awal video klip..."));
+                await ThumbnailComposer.PrependOpeningToVideoAsync(openingMp4, mainRenderedMp4, output, job, ct);
+            }
+            else
+            {
+                await _renderer.RenderAsync(source, assFile, output, job, cropExpression, clip.PreserveFullFrame,
+                    fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
+                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct);
+
+                progress.Report(JobProgress.Stage("Membuat cover thumbnail 9:16 statis dengan teks hook..."));
+                await ThumbnailComposer.GenerateStaticThumbnailAsync(
+                    source, relativeHero, hookText, thumbnailPath, job, cropExpression,
+                    clip.PreserveFullFrame, style.FontName, fontsDir, ct);
+            }
+
+            progress.Report(JobProgress.Stage("Cover thumbnail 9:16 siap: " + Path.GetFileName(thumbnailPath)));
         }
         catch
         {
             TryDeleteFile(output); // jangan tinggalkan mp4 setengah jadi
+            TryDeleteFile(thumbnailPath);
             throw;
         }
 

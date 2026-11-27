@@ -174,6 +174,9 @@
                 </Border>
                 <Image x:Name="PreviewFullFrame" Width="270" Height="480" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False" />
                 <Image x:Name="PreviewFrame" Width="270" Height="480" Stretch="Fill" IsHitTestVisible="False" />
+                <Border x:Name="PreviewHookBadge" Canvas.Top="60" Canvas.Left="15" Width="240" Background="#B8004F" BorderBrush="#FFD329" BorderThickness="2" CornerRadius="4" Padding="6,4" Visibility="Collapsed" IsHitTestVisible="False">
+                  <TextBlock x:Name="PreviewHookText" Text="HOOK TITLE" Foreground="#FFFFFF" FontFamily="Segoe UI" FontWeight="Black" FontSize="13" TextAlignment="Center" TextWrapping="Wrap" />
+                </Border>
                 <local:CaptionPreviewElement x:Name="PreviewCaption" Canvas.Left="20" Width="230" Height="480" IsHitTestVisible="False" />
               </Canvas>
             </Border>
@@ -286,6 +289,21 @@
               <Button x:Name="FrameRemoveButton" Content="DELETE" Padding="7,2" Margin="5,0,0,0" Click="FrameRemoveButton_Click" />
             </DockPanel>
             <TextBlock x:Name="FramePathText" Text="No frame selected" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0" />
+
+            <Separator Margin="0,12,0,8" />
+            <Expander x:Name="ThumbnailExpander" Header="THUMBNAIL &amp; OPENING HOOK" IsExpanded="True">
+              <StackPanel Margin="2,6,2,2">
+                <TextBlock Text="Thumbnail 9:16 statis wajib dibuat untuk setiap klip/video. Opening Motion Composite (animasi 2-3s) bersifat opsional." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <TextBlock Text="THUMBNAIL HOOK (2-4 KATA ALL CAPS)" FontWeight="Bold" Margin="0,2,0,3" />
+                <TextBox x:Name="ThumbnailHookBox" TextChanged="ThumbnailHook_TextChanged" LostFocus="ThumbnailHook_LostFocus" ToolTip="Contoh: ROASTING SAIFUL GOSONG" />
+                <DockPanel Margin="0,8,0,4">
+                  <TextBlock Text="HERO FRAME (TIMESTAMP)" FontWeight="Bold" VerticalAlignment="Center" ToolTip="Format HH:MM:SS atau detik" />
+                  <TextBox x:Name="HeroFrameTimeBox" Width="80" HorizontalAlignment="Right" TextChanged="HeroFrame_TextChanged" LostFocus="HeroFrame_LostFocus" ToolTip="Format HH:MM:SS atau detik" />
+                </DockPanel>
+                <CheckBox x:Name="OpeningMotionCheckBox" Content="Opening Video Motion Composite (2s)" Margin="0,6,0,2" Checked="OpeningMotion_Changed" Unchecked="OpeningMotion_Changed" ToolTip="Tambahkan animasi motion pop-in hook di awal video klip" />
+                <TextBlock Text="Jika aktif, thumbnail statis diekstrak dari puncak animasi Video Motion Composite. Jika mati, diambil dari hero frame video asli." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="18,0,0,6" />
+              </StackPanel>
+            </Expander>
 
             <Separator Margin="0,12,0,8" />
             <Expander x:Name="YouTubeMetadataExpander" Header="YOUTUBE METADATA" IsExpanded="True">

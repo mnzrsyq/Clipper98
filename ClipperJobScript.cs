@@ -34,10 +34,13 @@ public static class ClipperJobScript
     {
         if (manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase))
         {
-            manifest.KeepSegments = clips.FirstOrDefault()?.KeptSegments ?? [];
+            var first = clips.FirstOrDefault();
+            manifest.KeepSegments = first?.KeptSegments ?? [];
             manifest.ClipsData = [];
-            manifest.YouTubeTitle = clips.FirstOrDefault()?.YouTubeTitle ?? string.Empty;
-            manifest.YouTubeDescription = clips.FirstOrDefault()?.YouTubeDescription ?? string.Empty;
+            manifest.YouTubeTitle = first?.YouTubeTitle ?? string.Empty;
+            manifest.YouTubeDescription = first?.YouTubeDescription ?? string.Empty;
+            manifest.HeroFrameSeconds = first?.HeroFrameSeconds;
+            manifest.ThumbnailHook = first?.ThumbnailHook ?? string.Empty;
         }
         else
         {
@@ -46,6 +49,8 @@ public static class ClipperJobScript
                 Id = clip.Name,
                 StartSeconds = clip.Start,
                 EndSeconds = clip.End,
+                HeroFrameSeconds = clip.HeroFrameSeconds,
+                ThumbnailHook = clip.ThumbnailHook,
                 Selected = clip.IsSelected,
                 Hook = clip.Hook,
                 Reason = clip.Reason,
@@ -132,6 +137,10 @@ public static class ClipperJobScript
                     Name = "video_ringkas",
                     Start = lead,
                     End = tail,
+                    HeroFrameSeconds = manifest.HeroFrameSeconds ?? lead,
+                    ThumbnailHook = !string.IsNullOrWhiteSpace(manifest.ThumbnailHook)
+                        ? manifest.ThumbnailHook
+                        : (string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "RINGKASAN VIDEO" : manifest.CondensedSummary),
                     Hook = string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "Condensed video" : manifest.CondensedSummary,
                     Reason = $"{orderedSegments.Count} segments retained · output about {TimeSpan.FromSeconds(keptDuration):hh\\:mm\\:ss}",
                     KeptSegments = orderedSegments,
@@ -157,6 +166,8 @@ public static class ClipperJobScript
                 Name = item.Id,
                 Start = item.StartSeconds,
                 End = item.EndSeconds,
+                HeroFrameSeconds = item.HeroFrameSeconds ?? (item.StartSeconds + (item.EndSeconds - item.StartSeconds) / 2.0),
+                ThumbnailHook = !string.IsNullOrWhiteSpace(item.ThumbnailHook) ? item.ThumbnailHook : item.Hook,
                 IsSelected = item.Selected,
                 Hook = item.Hook,
                 Reason = item.Reason,

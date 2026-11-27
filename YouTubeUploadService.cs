@@ -87,9 +87,41 @@ public sealed class YouTubeUploadService
             throw new YouTubeUploadOutcomeUnknownException(
                 $"Google API upload status: {uploadResult.Status}. Check the process log for transfer progress.");
 
-        return responseVideo ?? request.ResponseBody
+        var finalVideo = responseVideo ?? request.ResponseBody
             ?? throw new YouTubeUploadOutcomeUnknownException(
                 "Google API reported a completed transfer but returned no video record.");
+
+        if (!string.IsNullOrWhiteSpace(finalVideo.Id))
+        {
+            await TryUploadThumbnailAsync(service, finalVideo.Id, item.FilePath, cancellationToken);
+        }
+
+        return finalVideo;
+    }
+
+    private static async Task TryUploadThumbnailAsync(
+        YouTubeService service,
+        string videoId,
+        string videoFilePath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var jpgPath = Path.ChangeExtension(videoFilePath, ".jpg");
+            var pngPath = Path.ChangeExtension(videoFilePath, ".png");
+            var thumbPath = File.Exists(jpgPath) ? jpgPath : (File.Exists(pngPath) ? pngPath : null);
+            if (thumbPath is null) return;
+
+            var mimeType = thumbPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
+            await using var stream = new FileStream(thumbPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var thumbRequest = service.Thumbnails.Set(videoId, stream, mimeType);
+            await thumbRequest.UploadAsync(cancellationToken);
+        }
+        catch
+        {
+            // Custom thumbnail memerlukan fitur lanjutan/verifikasi nomor HP di YouTube Studio.
+            // Jangan gagalkan upload video jika thumbnail ditolak oleh kuota/hak akses channel.
+        }
     }
 
     private static bool IsUploadLimitExceeded(Google.GoogleApiException ex) =>

@@ -62,6 +62,8 @@ CLIPPER_JOB = {
             "id": "clip_01",
             "start_seconds": 65,
             "end_seconds": 105,
+            "hero_frame_seconds": 85.5,
+            "thumbnail_hook": "ROASTING SAIFUL GOSONG",
             "selected": True,
             "hook": "Hook singkat",
             "reason": "Alasan spesifik momen ini menarik",
@@ -79,6 +81,8 @@ CLIPPER_JOB = {
 - Pertahankan `mode` sebagai `short_clips`, `schema_version` sebagai angka `1`, `platform` sebagai `youtube`, dan `constraints.max_height` pada rentang 1–1080. Gunakan URL YouTube HTTPS yang asli.
 - `requested_candidate_count` adalah jumlah yang diminta dalam prompt dan harus 1–20. Jumlah aktual `clips_data` juga harus 1–20, tetapi tidak harus sama dengan jumlah yang diminta. Jangan menambahkan klip yang lemah hanya agar jumlahnya sama.
 - Setiap item klip harus memakai field persis seperti contoh. `id` wajib unik dengan pola `clip_01` sampai `clip_20` atau `custom_01` sampai `custom_20`; `selected` wajib `True` atau `False`; `hashtags` wajib berupa list string.
+- `hero_frame_seconds` adalah detik spesifik (angka float atau integer) di dalam rentang `start_seconds` dan `end_seconds` di mana visual paling menarik, ada ekspresi heboh, aksi klimaks, atau objek utama paling jelas untuk dijadikan cover thumbnail 9:16.
+- `thumbnail_hook` adalah teks hook untuk cover thumbnail: WAJIB 2–4 KATA SAJA, SEMUA HURUF BESAR (ALL CAPS), sangat click-worthy / memancing rasa penasaran penonton terhadap isi klip. Dilarang membuat kalimat panjang atau generik.
 - `start_seconds` dan `end_seconds` adalah angka detik bulat dari awal video. `end_seconds` harus lebih besar dari `start_seconds`. Prioritaskan durasi di bawah 60 detik. Klip tepat 60 detik boleh jika payoff selesai tepat di sana. Durasi 61–100 detik hanya boleh jika konteks atau payoff belum selesai sebelum itu dan semua bagiannya tetap relevan; jangan keluarkan durasi di atas 100 detik. Jaga satu topik dan satu alur, lalu potong setelah payoff tanpa menyertakan obrolan melebar atau topik berikutnya. Jangan memperpanjang klip demi memenuhi jumlah kandidat.
 - Tinjau konteks pada kedua batas. Mulai di awal pikiran yang perlu dipahami dan akhiri setelah selesai, tanpa menarik bagian percakapan berikutnya yang tidak relevan.
 - `reason` menjelaskan secara singkat mengapa momen menarik dan bagaimana potongannya berdiri sendiri. Jangan mengklaim batas awal/akhir terverifikasi bila video atau transkrip di sekitar timestamp tidak dapat diperiksa.

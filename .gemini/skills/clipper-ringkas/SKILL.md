@@ -41,6 +41,8 @@ CLIPPER_JOB = {
     },
     "requested_candidate_count": 1,
     "target_duration_seconds": 180,
+    "hero_frame_seconds": 145.0,
+    "thumbnail_hook": "ROASTING SAIFUL GOSONG",
     "condensed_summary": "Ringkasan isi video dan perkiraan durasi hasil yang sesuai.",
     "youtube_title": "Judul video ringkas yang spesifik dan maksimal 100 karakter",
     "youtube_description": "Deskripsi akurat, siap tempel ke YouTube Studio.\n\n#hashtag1 #hashtag2 #Shorts",
@@ -75,6 +77,8 @@ CLIPPER_JOB = {
 - Isi `keep_segments` dengan 1–100 rentang yang berurutan, punya alasan spesifik, berada dalam durasi sumber bila diketahui, dan tidak saling tumpang tindih.
 - Jumlahkan durasi setiap rentang untuk memperkirakan panjang hasil; jangan menghitung jarak dari rentang pertama sampai terakhir.
 - Pastikan `youtube_title` sesuai isi hasil dan maksimal 100 karakter. `youtube_description` maksimal 5.000 karakter, faktual, siap unggah, dan hashtag hanya berada pada baris terakhir.
+- `hero_frame_seconds` adalah detik visual puncak dari salah satu keep_segments (angka float atau integer) di mana visual paling menarik/klimaks untuk dijadikan cover thumbnail 9:16.
+- `thumbnail_hook` adalah teks hook cover thumbnail: WAJIB 2–4 KATA SAJA, HURUF BESAR SEMUA (ALL CAPS), sangat click-worthy / memancing rasa penasaran penonton. Dilarang membuat kalimat panjang atau generik.
 - Saat narasi aktif, isi setiap `narration` dengan VO yang mendukung rentang terkait. Dengarkan alurnya sebagai satu video utuh: kalimat boleh menjembatani cut, tetapi setiap klaim tetap harus didukung bagian video yang dipertahankan.
 - Saat narasi mati, semua nilai `narration` harus berupa string kosong.
 - Ambil `video_id` dari URL dan isi durasi sumber bila diketahui. Bila tidak diketahui, gunakan `None`.
