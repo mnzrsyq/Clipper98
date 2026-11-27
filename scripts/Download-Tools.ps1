@@ -1,5 +1,5 @@
 param(
-    [string]$TargetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Clipper98-v1.1.2')
+    [string]$TargetDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Clipper98-v1.1.3')
 )
 
 $ErrorActionPreference = 'Stop'

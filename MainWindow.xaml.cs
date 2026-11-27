@@ -871,32 +871,47 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var entries = Directory.GetFileSystemEntries(outputPath);
-            if (entries.Length == 0)
+            var bankPath = Path.Combine(outputPath, "Content_Bank_Mingguan");
+            if (!Directory.Exists(bankPath))
             {
-                SetStatus("STATUS: Output folder is already empty.");
+                SetStatus("STATUS: Content Bank folder was not found.");
+                return;
+            }
+
+            var dayNames = new[] { "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu" };
+            var dayFolders = dayNames.Select(day => Path.Combine(bankPath, day)).ToList();
+            foreach (var dayFolder in dayFolders)
+                Directory.CreateDirectory(dayFolder);
+            var dayEntries = dayFolders.Select(Directory.GetFileSystemEntries).ToList();
+            var itemCount = dayEntries.Sum(entries => entries.Length);
+            if (itemCount == 0)
+            {
+                SetStatus("STATUS: Content Bank weekday folders are already empty.");
                 return;
             }
 
             var choice = WpfMessageBox.Show(this,
-                $"This will permanently delete {entries.Length} item(s) inside this folder, including all files and subfolders:\n\n{outputPath}\n\nThe folder itself will remain. This cannot be undone. Continue?",
-                "Empty output folder?", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                $"This will permanently delete {itemCount} item(s) inside the Senin–Minggu folders under:\n\n{bankPath}\n\nThe Content Bank, weekday folders, and files directly in the output folder will stay. This cannot be undone. Continue?",
+                "Clear Content Bank?", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
             if (choice != MessageBoxResult.Yes) return;
 
-            foreach (var entry in entries)
+            foreach (var entries in dayEntries)
             {
-                var attributes = File.GetAttributes(entry);
-                if ((attributes & FileAttributes.Directory) != 0)
-                    Directory.Delete(entry, (attributes & FileAttributes.ReparsePoint) == 0);
-                else
-                    File.Delete(entry);
+                foreach (var entry in entries)
+                {
+                    var attributes = File.GetAttributes(entry);
+                    if ((attributes & FileAttributes.Directory) != 0)
+                        Directory.Delete(entry, (attributes & FileAttributes.ReparsePoint) == 0);
+                    else
+                        File.Delete(entry);
+                }
             }
-            SetStatus($"STATUS: Emptied output folder ({entries.Length} item(s) deleted).");
+            SetStatus($"STATUS: Cleared Content Bank ({itemCount} item(s) deleted). Weekday folders remain.");
         }
         catch (Exception ex)
         {
-            SetStatus("STATUS: Could not fully empty the output folder.", true);
-            WpfMessageBox.Show(this, ex.Message, "Empty output folder", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SetStatus("STATUS: Could not fully clear the Content Bank.", true);
+            WpfMessageBox.Show(this, ex.Message, "Clear Content Bank", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

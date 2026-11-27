@@ -10,7 +10,7 @@
     <NoWarn>$(NoWarn);CS9057</NoWarn>
     <AssemblyName>Clipper98</AssemblyName>
     <RootNamespace>Clipper98</RootNamespace>
-    <Version>1.1.2</Version>
+    <Version>1.1.3</Version>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" Version="1.78.0" />
