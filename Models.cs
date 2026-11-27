@@ -59,7 +59,7 @@ public sealed class ClipperJobManifest
     [JsonPropertyName("schema_version")] public int SchemaVersion { get; set; } = 1;
     [JsonPropertyName("mode")] public string Mode { get; set; } = "short_clips";
     [JsonPropertyName("source")] public ClipperJobSource Source { get; set; } = new();
-    [JsonPropertyName("requested_candidate_count")] public int RequestedCandidateCount { get; set; } = 5;
+    [JsonPropertyName("requested_candidate_count")] public int RequestedCandidateCount { get; set; } = 7;
     [JsonPropertyName("target_duration_seconds")] public int TargetDurationSeconds { get; set; }
     [JsonPropertyName("condensed_summary")] public string CondensedSummary { get; set; } = string.Empty;
     [JsonPropertyName("youtube_title")] public string YouTubeTitle { get; set; } = string.Empty;
@@ -111,6 +111,8 @@ public sealed class RenderJobRequest
 {
     [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
     [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
+    [JsonPropertyName("youtube_title")] public string YouTubeTitle { get; set; } = string.Empty;
+    [JsonPropertyName("youtube_description")] public string YouTubeDescription { get; set; } = string.Empty;
     [JsonPropertyName("clip")] public ClipperJobClip Clip { get; set; } = new();
     [JsonPropertyName("segments")] public List<CondensedSegment> Segments { get; set; } = [];
     [JsonPropertyName("hero_frame_seconds")] public double? HeroFrameSeconds { get; set; }
@@ -124,6 +126,7 @@ public sealed class RenderJobRequest
     [JsonPropertyName("preserve_source_aspect_ratio")] public bool PreserveSourceAspectRatio { get; set; }
     [JsonPropertyName("use_four_by_five_content_frame")] public bool UseFourByFiveContentFrame { get; set; }
     [JsonPropertyName("caption_style")] public CaptionStyle CaptionStyle { get; set; } = new();
+    [JsonPropertyName("thumbnail_hook_style")] public ThumbnailHookStyle ThumbnailHookStyle { get; set; } = new();
     [JsonPropertyName("output_folder")] public string OutputFolder { get; set; } = string.Empty;
     [JsonPropertyName("language")] public string Language { get; set; } = "id";
     [JsonPropertyName("subtitle_source")] public string SubtitleSource { get; set; } = "auto";
@@ -164,6 +167,28 @@ public sealed class CaptionStyle
     public string TextCase { get; set; } = "sentence";
 }
 
+public sealed class ThumbnailHookStyle
+{
+    public string FontName { get; set; } = "Anton";
+    public string FontFilePath { get; set; } = string.Empty;
+    public bool HookEnabled { get; set; } = true;
+    public int FontSize { get; set; } = 128;
+    public string FirstLineColor { get; set; } = "#FFFFFF";
+    public string SecondLineColor { get; set; } = "#FFF000";
+    public string OutlineColor { get; set; } = "#000000";
+    public int OutlineSize { get; set; } = 12;
+    public bool ShadowEnabled { get; set; } = true;
+    public string ShadowColor { get; set; } = "#000000";
+    public int ShadowBlur { get; set; } = 7;
+    public int ShadowOffset { get; set; } = 5;
+    public double ShadowOpacity { get; set; } = 0.8;
+    public bool BadgeEnabled { get; set; } = true;
+    public string BadgeColor { get; set; } = "#D9232E";
+    public string BadgeShape { get; set; } = "rectangle";
+    public int LineSpacing { get; set; } = 8;
+    public int PositionY { get; set; } = 565;
+}
+
 public sealed class AppSettings
 {
     public string OutputFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Clipper98");
@@ -183,6 +208,7 @@ public sealed class AppSettings
     public bool EnableOpeningMotion { get; set; }
     public double OpeningMotionDurationSeconds { get; set; } = 2.0;
     public string ThumbnailFontName { get; set; } = "Anton";
+    public ThumbnailHookStyle? ThumbnailHookStyle { get; set; }
     public string YouTubeClientSecretsJson { get; set; } = string.Empty;
     public List<YouTubeUploadItem> YouTubeUploadQueue { get; set; } = [];
     public DateTimeOffset? LastUploadedPublishAt { get; set; }
@@ -202,6 +228,9 @@ public sealed class YouTubeUploadItem : INotifyPropertyChanged
     public string FilePath { get; set; } = string.Empty;
     public string ClipName { get; set; } = string.Empty;
     public string YouTubeVideoId { get; set; } = string.Empty;
+    public string OriginalTitle { get; set; } = string.Empty;
+    public string OriginalDescription { get; set; } = string.Empty;
+    public bool HasEmbeddedMetadata { get; set; }
 
     public bool IsSelected
     {
@@ -269,6 +298,7 @@ public sealed class SubtitleStylePreset
 {
     public string Name { get; set; } = string.Empty;
     public CaptionStyle Style { get; set; } = new();
+    public ThumbnailHookStyle? ThumbnailHookStyle { get; set; }
 }
 
 public sealed class ScanResult

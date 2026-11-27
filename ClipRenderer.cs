@@ -5,7 +5,7 @@ namespace Clipper98;
 /// <summary>Render either 9:16 or source aspect ratio, with optional framing, PNG frame, and captions.</summary>
 public sealed class ClipRenderer
 {
-    private const string Preset = "fast";
+    private const string Preset = "veryfast";
     private const int Crf = 20;
 
     public async Task RenderAsync(
@@ -13,7 +13,7 @@ public sealed class ClipRenderer
         string? cropExpression, bool preserveFullFrame, IReadOnlyList<SmartCropSegment>? fullFrameSegments,
         string? framePngPath, string? fontFilePath, bool preserveSourceAspectRatio,
         bool useFourByFiveContentFrame, IReadOnlyList<NarrationTrack> narrationTracks,
-        TtsOptions ttsOptions, CancellationToken ct)
+        TtsOptions ttsOptions, CancellationToken ct, string metadataTitle = "", string metadataDescription = "")
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
         var hasFrame = !preserveSourceAspectRatio && !string.IsNullOrWhiteSpace(framePngPath);
@@ -144,12 +144,23 @@ public sealed class ClipRenderer
         if (hasNarration) args.AddRange(["-map", "[aout]"]);
         else args.AddRange(["-map", "0:a?"]);
         args.AddRange([
-            "-shortest",
+            "-shortest", "-metadata", $"title={metadataTitle}", "-metadata", $"description={metadataDescription}",
+            "-metadata", $"comment={VideoMetadataCodec.EncodeComment(metadataTitle, metadataDescription)}",
             "-c:v", "libx264", "-preset", Preset, "-crf", Crf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output
         ]);
 
-        var result = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
+        var amfArgs = args.ToList();
+        var codecIndex = amfArgs.IndexOf("libx264");
+        amfArgs[codecIndex] = "h264_amf";
+        amfArgs.RemoveRange(codecIndex + 1, 3);
+        amfArgs.InsertRange(codecIndex + 1, ["-quality", "speed", "-b:v", "8M"]);
+        var result = await ProcessRunner.RunAsync(ffmpeg, amfArgs, workDir, null, ct);
+        if (result.ExitCode != 0)
+        {
+            if (File.Exists(output)) File.Delete(output);
+            result = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
+        }
         if (result.ExitCode != 0) throw new InvalidOperationException("Render video gagal. " + result.Tail());
     }
 

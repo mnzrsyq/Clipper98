@@ -20,6 +20,7 @@ public sealed class SmartCropAnalyzer
     {
         try
         {
+            Cv2.SetNumThreads(Math.Max(1, Environment.ProcessorCount));
             var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
             var model = Path.Combine(AppContext.BaseDirectory, "tools", "models", "haarcascade_frontalface_default.xml");
             if (!File.Exists(model)) return Unavailable();
@@ -29,7 +30,7 @@ public sealed class SmartCropAnalyzer
             var template = Path.Combine(sampleDir, "frame-%04d.jpg");
             var extract = await ProcessRunner.RunAsync(
                 ffmpeg,
-                ["-hide_banner", "-loglevel", "error", "-y", "-i", videoFile, "-vf", "fps=1,scale=640:-2", "-q:v", "4", template],
+                ["-hide_banner", "-loglevel", "error", "-threads", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture), "-y", "-i", videoFile, "-vf", "fps=1,scale=640:-2", "-q:v", "4", template],
                 workDir, null, ct);
             if (extract.ExitCode != 0) return Unavailable();
 

@@ -13,10 +13,11 @@ public sealed class ClipPipeline
     private readonly ClipRenderCache _cache = new();
 
     public async Task<string> RenderAsync(
-        string url, ScanResult scan, ClipCandidate clip, CaptionStyle style,
+        string url, ScanResult scan, ClipCandidate clip, CaptionStyle style, ThumbnailHookStyle thumbnailStyle,
         string outputFolder, string language, string subtitleSource, string framePngPath,
         bool useSubtitles, bool preserveSourceAspectRatio, bool useFourByFiveContentFrame,
-        bool useNarration, TtsOptions ttsOptions, IProgress<JobProgress> progress, CancellationToken ct)
+        bool useNarration, TtsOptions ttsOptions, IProgress<JobProgress> progress, CancellationToken ct,
+        string metadataTitle = "", string metadataDescription = "")
     {
         Directory.CreateDirectory(outputFolder);
         var job = Path.Combine(_workRoot, Guid.NewGuid().ToString("N"));
@@ -204,45 +205,17 @@ public sealed class ClipPipeline
             ? clip.ThumbnailHook
             : (!string.IsNullOrWhiteSpace(clip.Hook) ? clip.Hook : "KLIP TERBAIK");
 
-        var toolsFontsDir = Path.Combine(AppContext.BaseDirectory, "tools", "fonts");
-        if (!Directory.Exists(toolsFontsDir))
-        {
-            var alt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "fonts");
-            if (Directory.Exists(alt)) toolsFontsDir = alt;
-        }
-
-        var renderFontsDir = Path.Combine(job, "render-fonts");
-        Directory.CreateDirectory(renderFontsDir);
-        if (Directory.Exists(toolsFontsDir))
-        {
-            foreach (var f in Directory.EnumerateFiles(toolsFontsDir))
-            {
-                var ext = Path.GetExtension(f);
-                if (ext.Equals(".ttf", StringComparison.OrdinalIgnoreCase) || ext.Equals(".otf", StringComparison.OrdinalIgnoreCase))
-                {
-                    var dest = Path.Combine(renderFontsDir, Path.GetFileName(f));
-                    if (!File.Exists(dest)) File.Copy(f, dest, overwrite: true);
-                }
-            }
-        }
-        if (!string.IsNullOrWhiteSpace(style.FontFilePath) && File.Exists(style.FontFilePath))
-        {
-            var dest = Path.Combine(renderFontsDir, Path.GetFileName(style.FontFilePath));
-            if (!File.Exists(dest)) File.Copy(style.FontFilePath, dest, overwrite: true);
-        }
-        var fontsDir = renderFontsDir;
-        var thumbFont = !string.IsNullOrWhiteSpace(clip.ThumbnailFontName) ? clip.ThumbnailFontName : "Anton";
         var openingDuration = clip.OpeningMotionDurationSeconds > 0 ? clip.OpeningMotionDurationSeconds : 2.0;
 
         try
         {
-            if (clip.EnableOpeningMotion && !preserveSourceAspectRatio)
+            if (clip.EnableOpeningMotion && thumbnailStyle.HookEnabled && !preserveSourceAspectRatio)
             {
                 progress.Report(JobProgress.Stage($"Rendering Opening Video Motion Composite ({openingDuration:0.#}s)..."));
                 var openingMp4 = Path.Combine(job, "opening_motion.mp4");
                 await ThumbnailComposer.RenderOpeningMotionCompositeAsync(
                     source, relativeHero, hookText, openingMp4, job, cropExpression,
-                    clip.PreserveFullFrame, thumbFont, fontsDir, openingDuration, ct);
+                    clip.PreserveFullFrame, thumbnailStyle, openingDuration, ct);
 
                 progress.Report(JobProgress.Stage("Mengekstrak cover thumbnail statis dari puncak animasi Video Motion Composite..."));
                 await ThumbnailComposer.ExtractThumbnailFromMotionAsync(openingMp4, thumbnailPath, job, Math.Min(openingDuration * 0.6, 1.2), ct);
@@ -250,21 +223,22 @@ public sealed class ClipPipeline
                 var mainRenderedMp4 = Path.Combine(job, "main_rendered.mp4");
                 await _renderer.RenderAsync(source, assFile, mainRenderedMp4, job, cropExpression, clip.PreserveFullFrame,
                     fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
-                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct);
+                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription);
 
                 progress.Report(JobProgress.Stage("Menyatukan Opening Motion Composite ke awal video klip..."));
                 await ThumbnailComposer.PrependOpeningToVideoAsync(openingMp4, mainRenderedMp4, output, job, ct);
+                await VideoMetadataCodec.WriteAsync(output, metadataTitle, metadataDescription, job, ct);
             }
             else
             {
                 await _renderer.RenderAsync(source, assFile, output, job, cropExpression, clip.PreserveFullFrame,
                     fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
-                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct);
+                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription);
 
                 progress.Report(JobProgress.Stage("Membuat cover thumbnail 9:16 statis dengan teks hook..."));
                 await ThumbnailComposer.GenerateStaticThumbnailAsync(
                     source, relativeHero, hookText, thumbnailPath, job, cropExpression,
-                    clip.PreserveFullFrame, thumbFont, fontsDir, ct);
+                    clip.PreserveFullFrame, thumbnailStyle, ct);
             }
 
             progress.Report(JobProgress.Stage("Cover thumbnail 9:16 siap: " + Path.GetFileName(thumbnailPath)));
@@ -279,6 +253,86 @@ public sealed class ClipPipeline
         activeLock.Dispose();
         TryDeleteFolder(job); // hanya folder kerja milik job ini, hanya bila sukses
         return output;
+    }
+
+    public async Task<byte[]> RenderThumbnailPreviewAsync(
+        string url, ClipCandidate clip, string hookText, ThumbnailHookStyle thumbnailStyle,
+        bool preserveSourceAspectRatio, bool useFourByFiveContentFrame,
+        IProgress<JobProgress> progress, CancellationToken ct)
+    {
+        var job = Path.Combine(_workRoot, "thumbnail-preview-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(job);
+        using var activeLock = TempCacheService.AcquireActiveLock(job);
+        using var cacheLock = _cache.AcquireActiveLock();
+        try
+        {
+            string source;
+            if (clip.KeptSegments.Count > 0)
+            {
+                source = await DownloadAndJoinSegmentsAsync(url, clip.KeptSegments, job, progress, ct);
+            }
+            else
+            {
+                var cachedVideo = _cache.GetVideoPath(url, clip.Start, clip.End);
+                if (_cache.TryGetVideo(cachedVideo))
+                {
+                    source = cachedVideo;
+                }
+                else
+                {
+                    progress.Report(JobProgress.Stage("Downloading the selected clip once to build an exact thumbnail preview..."));
+                    var downloaded = await _ytDlp.DownloadSectionAsync(
+                        url, clip.Start, clip.End, Path.Combine(job, "preview-source.mp4"), job,
+                        progress.Report, ct);
+                    try
+                    {
+                        _cache.StoreVideo(downloaded, cachedVideo);
+                        source = cachedVideo;
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        source = downloaded;
+                    }
+                }
+            }
+
+            string? cropExpression = null;
+            if (useFourByFiveContentFrame && !clip.PreserveFullFrame)
+            {
+                var analysis = await AnalyzeFramingCachedAsync(source, job, ct, cropHeight: 1350);
+                cropExpression = analysis.CropExpression;
+            }
+            else if (!preserveSourceAspectRatio && !useFourByFiveContentFrame && !clip.PreserveFullFrame)
+            {
+                var analysis = await AnalyzeFramingCachedAsync(source, job, ct, cropHeight: 1920);
+                cropExpression = analysis.CropExpression;
+            }
+
+            var heroSeconds = clip.HeroFrameSeconds ?? clip.Start;
+            var relativeHero = ThumbnailComposer.CalculateRelativeHeroTime(clip, heroSeconds);
+            var previewPath = Path.Combine(job, "thumbnail-preview.jpg");
+            if (clip.EnableOpeningMotion && thumbnailStyle.HookEnabled && !preserveSourceAspectRatio)
+            {
+                var duration = clip.OpeningMotionDurationSeconds > 0 ? clip.OpeningMotionDurationSeconds : 2.0;
+                var openingPath = Path.Combine(job, "thumbnail-preview-opening.mp4");
+                await ThumbnailComposer.RenderOpeningMotionCompositeAsync(
+                    source, relativeHero, hookText, openingPath, job, cropExpression,
+                    clip.PreserveFullFrame, thumbnailStyle, duration, ct);
+                await ThumbnailComposer.ExtractThumbnailFromMotionAsync(
+                    openingPath, previewPath, job, Math.Min(duration * 0.6, 1.2), ct);
+            }
+            else
+            {
+                await ThumbnailComposer.GenerateStaticThumbnailAsync(
+                    source, relativeHero, hookText, previewPath, job, cropExpression,
+                    clip.PreserveFullFrame, thumbnailStyle, ct);
+            }
+            return await File.ReadAllBytesAsync(previewPath, ct);
+        }
+        finally
+        {
+            TryDeleteFolder(job);
+        }
     }
 
     private async Task<SmartCropAnalysis> AnalyzeFramingCachedAsync(

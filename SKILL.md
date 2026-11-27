@@ -13,7 +13,7 @@ Skill ini untuk mode **Klip Pendek** Clipper98. Pengguna memilih skill ini di Ge
 
 ## Alur kerja
 
-1. Ambil URL YouTube dan jumlah kandidat dari prompt. Jika jumlah tidak disebutkan, gunakan 5. Batas jumlah 1–20.
+1. Ambil URL YouTube dan jumlah kandidat dari prompt. Jika jumlah tidak disebutkan, gunakan 7. Batas jumlah 1–20.
 2. Analisis isi video yang sebenarnya memakai kemampuan video, transkrip, atau sumber konten yang tersedia. Jangan memilih momen hanya dari judul atau deskripsi. Jika isi video tidak dapat diakses, katakan demikian dan jangan mengarang timestamp.
 3. Pilih momen dengan hook jelas dan alur mandiri yang bisa dipahami.
 4. Mulai saat konteks yang dibutuhkan mulai, lalu akhiri setelah satu pikiran, jawaban, atau payoff selesai. Jangan masuk di tengah pikiran atau berhenti saat penjelasan masih berjalan.
@@ -46,7 +46,7 @@ CLIPPER_JOB = {
         "title": "Judul video",
         "duration_seconds": 888
     },
-    "requested_candidate_count": 5,
+    "requested_candidate_count": 7,
     "target_duration_seconds": 0,
     "condensed_summary": "",
     "youtube_title": "",

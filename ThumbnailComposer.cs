@@ -1,5 +1,18 @@
 using System.Globalization;
 using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
+using WpfBrush = System.Windows.Media.Brush;
+using WpfColor = System.Windows.Media.Color;
+using WpfColorConverter = System.Windows.Media.ColorConverter;
+using WpfFontFamily = System.Windows.Media.FontFamily;
+using WpfFlowDirection = System.Windows.FlowDirection;
+using WpfPoint = System.Windows.Point;
+using WpfSize = System.Windows.Size;
+using HookPath = System.Windows.Shapes.Path;
 
 namespace Clipper98;
 
@@ -27,52 +40,120 @@ public static class ThumbnailComposer
         return (l1, l2);
     }
 
-    public static void WriteHookAss(string assPath, string rawHook, bool isMotionAnimated, string? fontName = null)
+    public static void WriteHookOverlayPng(string outputPath, string rawHook, ThumbnailHookStyle style)
     {
         var (line1, line2) = SplitHookWords(rawHook);
-        var resolvedFont = string.IsNullOrWhiteSpace(fontName) ? "Anton" : fontName.Trim();
-
-        using var writer = new StreamWriter(assPath, false, new UTF8Encoding(false));
-        writer.WriteLine("[Script Info]");
-        writer.WriteLine("ScriptType: v4.00+");
-        writer.WriteLine("PlayResX: 1080");
-        writer.WriteLine("PlayResY: 1920");
-        writer.WriteLine();
-        writer.WriteLine("[V4+ Styles]");
-        writer.WriteLine("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding");
-        // Style Pill: kotak latar belakang berwarna crimson / deep red elegan dengan teks putih bersih
-        writer.WriteLine($"Style: HookPill,{resolvedFont},105,&H00FFFFFF,&H00000000,&H001810C0,&H001810C0,-1,0,0,0,100,100,2,0,3,22,0,5,40,40,0,1");
-        // Style Punch: teks raksasa super tebal warna neon yellow dengan outline hitam tebal dan drop shadow 3D
-        writer.WriteLine($"Style: HookPunch,{resolvedFont},155,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,100,100,2,0,1,18,9,5,40,40,0,1");
-        writer.WriteLine();
-        writer.WriteLine("[Events]");
-        writer.WriteLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
-
         var hasLine2 = !string.IsNullOrWhiteSpace(line2);
-        var y1 = hasLine2 ? 470 : 560;
-        var y2 = 660;
+        var canvas = new Canvas { Width = 1080, Height = 1920, ClipToBounds = false };
+        var familyName = string.IsNullOrWhiteSpace(style.FontName) ? "Anton" : style.FontName.Trim();
+        var family = !string.IsNullOrWhiteSpace(style.FontFilePath) && File.Exists(style.FontFilePath)
+            ? SubtitleFonts.ResolvePreviewFamily(new SubtitleFontOption { FamilyName = familyName, FilePath = style.FontFilePath })
+            : new WpfFontFamily(familyName);
+        var typeface = new Typeface(family, FontStyles.Normal, FontWeights.Black, FontStretches.Normal);
+        var size = Math.Clamp(style.FontSize, 48, 220);
+        var first = MakeHookText(line1, typeface, hasLine2 ? size * 0.72 : size, ParseColor(style.FirstLineColor, Colors.White));
+        (FormattedText Layout, Geometry Geometry, WpfBrush Fill)? second = hasLine2
+            ? MakeHookText(line2, typeface, size, ParseColor(style.SecondLineColor, Colors.Yellow))
+            : null;
 
-        if (isMotionAnimated)
+        var lineSpacing = Math.Clamp(style.LineSpacing, 0, 100);
+        var totalHeight = first.Layout.Height + (second is null ? 0 : lineSpacing + second.Value.Layout.Height);
+        var top = Math.Clamp(style.PositionY, 150, 1770) - totalHeight / 2;
+        AddHookLine(canvas, first, top, style, isFirstLine: true);
+        if (second is not null)
+            AddHookLine(canvas, second.Value, top + first.Layout.Height + lineSpacing, style, isFirstLine: false);
+
+        canvas.Measure(new WpfSize(1080, 1920));
+        canvas.Arrange(new Rect(0, 0, 1080, 1920));
+        canvas.UpdateLayout();
+        var bitmap = new RenderTargetBitmap(1080, 1920, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(canvas);
+        bitmap.Freeze();
+        using var stream = File.Create(outputPath);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        encoder.Save(stream);
+    }
+
+    private static (FormattedText Layout, Geometry Geometry, WpfBrush Fill) MakeHookText(
+        string text, Typeface typeface, double size, WpfColor color)
+    {
+        var layout = new FormattedText(text, Inv, WpfFlowDirection.LeftToRight, typeface, size,
+            new SolidColorBrush(color), 1.0)
         {
-            // Efek pop-in scale bounce modern:
-            // Baris 1: t=0ms..220ms (scale 30% -> 112%), t=220ms..320ms (112% -> 100%)
-            var anim1 = @"{\pos(540," + y1 + @")\fscx30\fscy30\t(0,220,\fscx112\fscy112)\t(220,320,\fscx100\fscy100)}" + line1;
-            writer.WriteLine($"Dialogue: 0,0:00:00.00,0:00:05.00,HookPill,,0,0,0,,{anim1}");
+            MaxTextWidth = 960,
+            Trimming = TextTrimming.CharacterEllipsis
+        };
+        return (layout, layout.BuildGeometry(new WpfPoint(0, 0)), new SolidColorBrush(color));
+    }
 
-            if (hasLine2)
+    private static void AddHookLine(
+        Canvas canvas, (FormattedText Layout, Geometry Geometry, WpfBrush Fill) text,
+        double top, ThumbnailHookStyle style, bool isFirstLine)
+    {
+        var bounds = text.Geometry.Bounds;
+        var left = (1080 - bounds.Width) / 2 - bounds.X;
+        var glyphTop = top - bounds.Y;
+        var outline = Math.Clamp(style.OutlineSize, 0, 40);
+
+        if (isFirstLine && style.BadgeEnabled && !style.BadgeShape.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            const double paddingX = 28;
+            const double paddingY = 14;
+            var badgeWidth = Math.Min(1024, text.Layout.WidthIncludingTrailingWhitespace + paddingX * 2);
+            var badgeHeight = text.Layout.Height + paddingY * 2;
+            var radius = style.BadgeShape.ToLowerInvariant() switch
             {
-                // Baris 2: t=100ms..340ms (scale 30% -> 115%), t=340ms..440ms (115% -> 100%)
-                var anim2 = @"{\pos(540," + y2 + @")\fscx30\fscy30\t(100,340,\fscx115\fscy115)\t(340,440,\fscx100\fscy100)}" + line2;
-                writer.WriteLine($"Dialogue: 1,0:00:00.00,0:00:05.00,HookPunch,,0,0,0,,{anim2}");
-            }
+                "rounded" => 14,
+                "pill" => badgeHeight / 2,
+                _ => 0
+            };
+            var badge = new Border
+            {
+                Width = badgeWidth,
+                Height = badgeHeight,
+                CornerRadius = new CornerRadius(radius),
+                Background = new SolidColorBrush(ParseColor(style.BadgeColor, Colors.Red)),
+                Effect = CreateShadow(style)
+            };
+            Canvas.SetLeft(badge, (1080 - badgeWidth) / 2);
+            Canvas.SetTop(badge, top - paddingY);
+            canvas.Children.Add(badge);
         }
-        else
+
+        var outlineBrush = new SolidColorBrush(ParseColor(style.OutlineColor, Colors.Black));
+        var path = new HookPath
         {
-            // Statis untuk thumbnail langsung
-            writer.WriteLine($"Dialogue: 0,0:00:00.00,0:00:05.00,HookPill,,0,0,0,,{{\\pos(540,{y1})}}{line1}");
-            if (hasLine2)
-                writer.WriteLine($"Dialogue: 1,0:00:00.00,0:00:05.00,HookPunch,,0,0,0,,{{\\pos(540,{y2})}}{line2}");
-        }
+            Data = text.Geometry,
+            Fill = text.Fill,
+            Stroke = outline > 0 ? outlineBrush : null,
+            StrokeThickness = outline,
+            StrokeLineJoin = PenLineJoin.Round,
+            Effect = CreateShadow(style),
+            SnapsToDevicePixels = true
+        };
+        Canvas.SetLeft(path, left);
+        Canvas.SetTop(path, glyphTop);
+        canvas.Children.Add(path);
+    }
+
+    private static DropShadowEffect? CreateShadow(ThumbnailHookStyle style) => !style.ShadowEnabled
+        ? null
+        : new DropShadowEffect
+        {
+            Color = ParseColor(style.ShadowColor, Colors.Black),
+            BlurRadius = Math.Clamp(style.ShadowBlur, 0, 40),
+            ShadowDepth = Math.Clamp(style.ShadowOffset, 0, 30),
+            Direction = 315,
+            Opacity = Math.Clamp(style.ShadowOpacity, 0, 1)
+        };
+
+    private static WpfColor ParseColor(string? value, WpfColor fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        try { return (WpfColor)WpfColorConverter.ConvertFromString(value)!; }
+        catch (FormatException) { return fallback; }
+        catch (InvalidCastException) { return fallback; }
     }
 
     public static double CalculateRelativeHeroTime(ClipCandidate clip, double heroSeconds)
@@ -104,40 +185,42 @@ public static class ThumbnailComposer
         string workDir,
         string? cropExpression,
         bool preserveFullFrame,
-        string? fontName,
-        string? fontsDir,
+        ThumbnailHookStyle hookStyle,
         CancellationToken ct)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
-        var assPath = Path.Combine(workDir, "thumb_hook.ass");
-        WriteHookAss(assPath, hookText, isMotionAnimated: false, fontName);
+        var hasHook = hookStyle.HookEnabled;
+        var overlayPath = Path.Combine(workDir, "thumbnail_hook.png");
+        if (hasHook) WriteHookOverlayPng(overlayPath, hookText, hookStyle);
 
-        var escapedAss = EscapeFilterPath(assPath);
-        var subFilter = $"subtitles=filename='{escapedAss}'";
-        if (!string.IsNullOrWhiteSpace(fontsDir) && Directory.Exists(fontsDir))
-            subFilter += $":fontsdir='{EscapeFilterPath(fontsDir)}'";
-
-        string filter;
+        string baseFilter;
         if (preserveFullFrame)
         {
-            filter = $"split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[base]{subFilter}";
+            baseFilter = "[0:v]split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base]";
         }
         else
         {
             var x = string.IsNullOrWhiteSpace(cropExpression) ? "(in_w-out_w)/2" : cropExpression;
-            filter = $"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0[base];[base]{subFilter}";
+            baseFilter = $"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0[base]";
         }
+        var filter = hasHook
+            ? $"{baseFilter};[1:v]format=rgba[hook];[base][hook]overlay=0:0:format=auto[out]"
+            : $"{baseFilter};[base]null[out]";
 
         var args = new List<string>
         {
             "-y",
             "-ss", relativeHeroSeconds.ToString("0.###", Inv),
-            "-i", sourceVideo,
-            "-vf", filter,
+            "-i", sourceVideo
+        };
+        if (hasHook) args.AddRange(["-i", overlayPath]);
+        args.AddRange([
+            "-filter_complex", filter,
+            "-map", "[out]",
             "-frames:v", "1",
             "-q:v", "2",
             outputJpgPath
-        };
+        ]);
 
         var res = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
         if (res.ExitCode != 0 || !File.Exists(outputJpgPath))
@@ -152,33 +235,29 @@ public static class ThumbnailComposer
         string workDir,
         string? cropExpression,
         bool preserveFullFrame,
-        string? fontName,
-        string? fontsDir,
+        ThumbnailHookStyle hookStyle,
         double openingDurationSeconds,
         CancellationToken ct)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
-        var assPath = Path.Combine(workDir, "motion_hook.ass");
-        WriteHookAss(assPath, hookText, isMotionAnimated: true, fontName);
-
-        var escapedAss = EscapeFilterPath(assPath);
-        var subFilter = $"subtitles=filename='{escapedAss}'";
-        if (!string.IsNullOrWhiteSpace(fontsDir) && Directory.Exists(fontsDir))
-            subFilter += $":fontsdir='{EscapeFilterPath(fontsDir)}'";
+        var overlayPath = Path.Combine(workDir, "thumbnail_hook.png");
+        WriteHookOverlayPng(overlayPath, hookText, hookStyle);
 
         string vFilter;
         if (preserveFullFrame)
         {
-            vFilter = $"split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920[base];[base]{subFilter}";
+            vFilter = "[0:v]split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920[base]";
         }
         else
         {
             var x = string.IsNullOrWhiteSpace(cropExpression) ? "(in_w-out_w)/2" : cropExpression;
-            vFilter = $"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0,scale=1080:1920[base];[base]{subFilter}";
+            vFilter = $"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0,scale=1080:1920[base]";
         }
 
         var duration = openingDurationSeconds > 0 ? openingDurationSeconds : 2.0;
         var hasAudio = (await MediaProbe.ProbeAsync(sourceVideo, ct)).HasAudio;
+        const string scale = "if(lt(t,0.28),0.3+0.9*t/0.28,if(lt(t,0.42),1.2-(t-0.28)*0.2/0.14,1))";
+        var filter = $"{vFilter};[1:v]scale=w='iw*({scale})':h='ih*({scale})':eval=frame[hook];[base][hook]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto[vout]";
 
         var args = new List<string>
         {
@@ -186,7 +265,8 @@ public static class ThumbnailComposer
             "-ss", relativeHeroSeconds.ToString("0.###", Inv),
             "-t", duration.ToString("0.###", Inv),
             "-i", sourceVideo,
-            "-filter_complex", $"[0:v]{vFilter}[vout]",
+            "-loop", "1", "-framerate", "30", "-i", overlayPath,
+            "-filter_complex", filter,
             "-map", "[vout]"
         };
 
@@ -197,17 +277,26 @@ public static class ThumbnailComposer
         }
         else
         {
-            args.AddRange(["-f", "lavfi", "-t", duration.ToString("0.###", Inv), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000", "-map", "1:a"]);
+            args.AddRange(["-f", "lavfi", "-t", duration.ToString("0.###", Inv), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000", "-map", "2:a"]);
         }
 
         args.AddRange([
-            "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-c:v", "h264_amf", "-quality", "speed", "-b:v", "8M", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
             "-t", duration.ToString("0.###", Inv),
             outputOpeningMp4
         ]);
 
         var res = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
+        if (res.ExitCode != 0)
+        {
+            if (File.Exists(outputOpeningMp4)) File.Delete(outputOpeningMp4);
+            var codecIndex = args.IndexOf("h264_amf");
+            args[codecIndex] = "libx264";
+            args.RemoveRange(codecIndex + 1, 3);
+            args.InsertRange(codecIndex + 1, ["-preset", "veryfast", "-crf", "20"]);
+            res = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
+        }
         if (res.ExitCode != 0 || !File.Exists(outputOpeningMp4))
             throw new InvalidOperationException("Gagal merender Opening Video Motion Composite. " + res.Tail());
 

@@ -37,6 +37,7 @@ public partial class App : System.Windows.Application
             Directory.CreateDirectory(Path.GetDirectoryName(request.ProgressFile)!);
             File.WriteAllText(request.ProgressFile, string.Empty, Encoding.UTF8);
             var progress = new FileProgress(request.ProgressFile);
+            var thumbnailStyle = request.ThumbnailHookStyle ?? new ThumbnailHookStyle();
             var output = await new ClipPipeline().RenderAsync(
                 request.Url,
                 new ScanResult { Title = request.Title },
@@ -47,7 +48,7 @@ public partial class App : System.Windows.Application
                     End = request.Clip.EndSeconds,
                     HeroFrameSeconds = request.HeroFrameSeconds ?? request.Clip.HeroFrameSeconds,
                     ThumbnailHook = request.ThumbnailHook ?? request.Clip.ThumbnailHook ?? request.Clip.Hook,
-                    ThumbnailFontName = !string.IsNullOrWhiteSpace(request.ThumbnailFont) ? request.ThumbnailFont : (!string.IsNullOrWhiteSpace(request.Clip.ThumbnailFont) ? request.Clip.ThumbnailFont : "Anton"),
+                    ThumbnailFontName = !string.IsNullOrWhiteSpace(thumbnailStyle.FontName) ? thumbnailStyle.FontName : (!string.IsNullOrWhiteSpace(request.ThumbnailFont) ? request.ThumbnailFont : (!string.IsNullOrWhiteSpace(request.Clip.ThumbnailFont) ? request.Clip.ThumbnailFont : "Anton")),
                     EnableOpeningMotion = request.EnableOpeningMotion,
                     OpeningMotionDurationSeconds = request.OpeningMotionDurationSeconds > 0 ? request.OpeningMotionDurationSeconds : (request.Clip.OpeningMotionDurationSeconds ?? 2.0),
                     Hook = request.Clip.Hook,
@@ -58,6 +59,7 @@ public partial class App : System.Windows.Application
                     KeptSegments = request.Segments
                 },
                 request.CaptionStyle,
+                thumbnailStyle,
                 request.OutputFolder,
                 request.Language,
                 request.SubtitleSource,
@@ -68,7 +70,9 @@ public partial class App : System.Windows.Application
                 request.UseNarration,
                 request.TtsOptions,
                 progress,
-                CancellationToken.None);
+                CancellationToken.None,
+                request.YouTubeTitle,
+                request.YouTubeDescription);
             progress.Report(JobProgress.Stage("OUTPUT:" + output));
             return 0;
         }

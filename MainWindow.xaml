@@ -74,7 +74,7 @@
             <StackPanel x:Name="ShortClipOptionsPanel" Margin="0,8,0,0">
               <TextBlock Text="CLIP COUNT" FontWeight="Bold" Margin="0,0,0,4" />
               <DockPanel LastChildFill="False">
-                <TextBox x:Name="CandidateCountBox" Text="5" Width="48" VerticalContentAlignment="Center" />
+                <TextBox x:Name="CandidateCountBox" Text="7" Width="48" VerticalContentAlignment="Center" />
                 <Button Content="ADD TIMESTAMP" Margin="8,0,0,0" Padding="6,2" Click="AddTimestampButton_Click" />
               </DockPanel>
             </StackPanel>
@@ -194,26 +194,23 @@
                 <Border x:Name="PreviewPlaceholder" Width="270" Height="480" Background="#15171A">
                   <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="25">
                     <TextBlock Text="PREVIEW 9:16" Foreground="#AEB4BC" FontFamily="Consolas" FontSize="17" FontWeight="Bold" TextAlignment="Center" />
-            <TextBlock Text="Enter a URL or import a manifest\nto preview the thumbnail and subtitles." Foreground="#C1C7CE" FontFamily="Consolas" FontSize="11" TextAlignment="Center" TextWrapping="Wrap" Margin="0,12,0,0" />
+                    <TextBlock x:Name="PreviewPlaceholderStatusText" Text="Import a Gemini manifest to preview the selected clip." Foreground="#C1C7CE" FontFamily="Consolas" FontSize="11" TextAlignment="Center" TextWrapping="Wrap" Margin="0,12,0,0" />
                   </StackPanel>
                 </Border>
                 <Image x:Name="PreviewFullFrame" Width="270" Height="480" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False" />
                 <Image x:Name="PreviewFrame" Width="270" Height="480" Stretch="Fill" IsHitTestVisible="False" />
-                <StackPanel x:Name="PreviewHookBadge" Canvas.Top="70" Canvas.Left="15" Width="240" Visibility="Collapsed" IsHitTestVisible="False">
-                  <Border x:Name="PreviewHookPillBorder" Background="#C01018" CornerRadius="12" Padding="10,3" HorizontalAlignment="Center" Margin="0,0,0,3">
-                    <TextBlock x:Name="PreviewHookLine1" Text="HOOK TITLE" Foreground="#FFFFFF" FontFamily="Segoe UI" FontWeight="Bold" FontSize="11" TextAlignment="Center" />
-                  </Border>
-                  <TextBlock x:Name="PreviewHookLine2" Text="PUNCH HOOK" Foreground="#FFFA00" FontFamily="Segoe UI" FontWeight="Black" FontSize="16" TextAlignment="Center" TextWrapping="Wrap">
-                    <TextBlock.Effect>
-                      <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="2" Direction="315" Opacity="0.95" />
-                    </TextBlock.Effect>
-                  </TextBlock>
-                </StackPanel>
+                <Image x:Name="PreviewThumbnailImage" Width="270" Height="480" Stretch="Fill" Visibility="Collapsed" IsHitTestVisible="False" />
                 <local:CaptionPreviewElement x:Name="PreviewCaption" Canvas.Left="20" Width="230" Height="480" IsHitTestVisible="False" />
               </Canvas>
             </Border>
           </Viewbox>
-          <TextBlock Grid.Row="1" Text="The static thumbnail shows framing only. The rendered clip uses the source video." Foreground="#AEB4BC" FontSize="10" TextWrapping="Wrap" Margin="2,5,2,0" />
+          <DockPanel Grid.Row="1" Margin="2,5,2,0">
+            <ComboBox x:Name="PreviewModeBox" DockPanel.Dock="Left" Width="132" SelectedIndex="1" SelectionChanged="PreviewMode_Changed">
+              <ComboBoxItem Content="VIDEO PREVIEW" Tag="video" />
+              <ComboBoxItem Content="FINAL THUMBNAIL" Tag="thumbnail" />
+            </ComboBox>
+            <TextBlock x:Name="PreviewStatusText" Text="Thumbnail preview matches the rendered JPG." Foreground="#AEB4BC" FontSize="10" TextWrapping="Wrap" Margin="7,4,2,0" />
+          </DockPanel>
         </Grid>
       </GroupBox>
 
@@ -326,6 +323,7 @@
             <Expander x:Name="ThumbnailExpander" Header="THUMBNAIL &amp; OPENING HOOK" IsExpanded="True">
               <StackPanel Margin="2,6,2,2">
                 <TextBlock Text="Thumbnail 9:16 statis wajib dibuat untuk setiap klip/video. Opening Motion Composite (animasi 1-4s) bersifat opsional." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <CheckBox x:Name="ThumbnailHookEnabledCheckBox" Content="Tampilkan hook di thumbnail dan opening" IsChecked="True" Margin="0,0,0,7" Checked="ThumbnailStyle_Changed" Unchecked="ThumbnailStyle_Changed" ToolTip="Mematikan ini akan menghilangkan teks hook dari thumbnail dan opening motion." />
                 <TextBlock Text="THUMBNAIL HOOK (2-4 KATA ALL CAPS)" FontWeight="Bold" Margin="0,2,0,3" />
                 <TextBox x:Name="ThumbnailHookBox" TextChanged="ThumbnailHook_TextChanged" LostFocus="ThumbnailHook_LostFocus" ToolTip="Contoh: ROASTING SAIFUL GOSONG" />
                 <DockPanel Margin="0,8,0,4">
@@ -333,13 +331,64 @@
                   <TextBox x:Name="HeroFrameTimeBox" Width="80" HorizontalAlignment="Right" TextChanged="HeroFrame_TextChanged" LostFocus="HeroFrame_LostFocus" ToolTip="Format HH:MM:SS atau detik" />
                 </DockPanel>
                 <TextBlock Text="FONT COVER THUMBNAIL" FontWeight="Bold" Margin="0,6,0,3" />
-                <ComboBox x:Name="ThumbnailFontBox" SelectionChanged="ThumbnailFontBox_SelectionChanged" ToolTip="Pilih font teks cover thumbnail (Anton sangat direkomendasikan untuk viral Shorts)">
-                  <ComboBoxItem Content="Anton (Rekomendasi Viral Shorts)" Tag="Anton" IsSelected="True" />
-                  <ComboBoxItem Content="Lilita One (Tebal &amp; Catchy)" Tag="Lilita One" />
-                  <ComboBoxItem Content="Bebas Neue (Modern Condensed)" Tag="Bebas Neue" />
-                  <ComboBoxItem Content="Montserrat Black (Clean Modern)" Tag="Montserrat" />
-                  <ComboBoxItem Content="Segoe UI Black (Classic Windows)" Tag="Segoe UI Black" />
-                </ComboBox>
+                <ComboBox x:Name="ThumbnailFontBox" DisplayMemberPath="DisplayName" IsTextSearchEnabled="True" SelectionChanged="ThumbnailFontBox_SelectionChanged" ToolTip="Pilih font yang terpasang di Windows atau yang sudah diimpor ke Clipper." />
+                <Expander x:Name="ThumbnailStyleExpander" Header="HOOK STYLE" IsExpanded="True" Margin="0,7,0,0">
+                  <StackPanel x:Name="ThumbnailStylePanel" Margin="4,5,2,2">
+                    <DockPanel Margin="0,0,0,2">
+                      <TextBlock Text="FONT SIZE" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailFontSizeLabel" Text="128 px" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailFontSizeSlider" Minimum="60" Maximum="180" Value="128" TickFrequency="4" ValueChanged="ThumbnailStyle_Changed" />
+                    <TextBlock Text="FIRST LINE COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,5,0,2" />
+                    <TextBox x:Name="ThumbnailFirstLineColorBox" Text="#FFFFFF" TextChanged="ThumbnailStyle_Changed" />
+                    <TextBlock Text="SECOND LINE COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,5,0,2" />
+                    <TextBox x:Name="ThumbnailSecondLineColorBox" Text="#FFF000" TextChanged="ThumbnailStyle_Changed" />
+                    <CheckBox x:Name="ThumbnailBadgeCheckBox" Content="Show first-line badge" IsChecked="True" Margin="0,7,0,2" Checked="ThumbnailStyle_Changed" Unchecked="ThumbnailStyle_Changed" />
+                    <TextBlock Text="BADGE SHAPE" FontWeight="Bold" Margin="0,3,0,2" />
+                    <ComboBox x:Name="ThumbnailBadgeShapeBox" SelectedIndex="0" SelectionChanged="ThumbnailStyle_Changed">
+                      <ComboBoxItem Content="Square corners" Tag="rectangle" />
+                      <ComboBoxItem Content="Rounded corners" Tag="rounded" />
+                      <ComboBoxItem Content="Pill" Tag="pill" />
+                    </ComboBox>
+                    <TextBlock Text="BADGE COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,5,0,2" />
+                    <TextBox x:Name="ThumbnailBadgeColorBox" Text="#D9232E" TextChanged="ThumbnailStyle_Changed" />
+                    <TextBlock Text="OUTLINE COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,5,0,2" />
+                    <TextBox x:Name="ThumbnailOutlineColorBox" Text="#000000" TextChanged="ThumbnailStyle_Changed" />
+                    <DockPanel Margin="0,7,0,2">
+                      <TextBlock Text="OUTLINE SIZE" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailOutlineSizeLabel" Text="12 px" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailOutlineSizeSlider" Minimum="0" Maximum="32" Value="12" TickFrequency="1" ValueChanged="ThumbnailStyle_Changed" />
+                    <CheckBox x:Name="ThumbnailShadowCheckBox" Content="Enable shadow" IsChecked="True" Margin="0,5,0,2" Checked="ThumbnailStyle_Changed" Unchecked="ThumbnailStyle_Changed" />
+                    <TextBlock Text="SHADOW COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,3,0,2" />
+                    <TextBox x:Name="ThumbnailShadowColorBox" Text="#000000" TextChanged="ThumbnailStyle_Changed" />
+                    <DockPanel Margin="0,5,0,2">
+                      <TextBlock Text="SHADOW STRENGTH" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailShadowOpacityLabel" Text="80%" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailShadowOpacitySlider" Minimum="0" Maximum="100" Value="80" TickFrequency="5" ValueChanged="ThumbnailStyle_Changed" />
+                    <DockPanel Margin="0,3,0,2">
+                      <TextBlock Text="SHADOW BLUR" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailShadowBlurLabel" Text="7 px" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailShadowBlurSlider" Minimum="0" Maximum="24" Value="7" TickFrequency="1" ValueChanged="ThumbnailStyle_Changed" />
+                    <DockPanel Margin="0,3,0,2">
+                      <TextBlock Text="SHADOW OFFSET" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailShadowOffsetLabel" Text="5 px" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailShadowOffsetSlider" Minimum="0" Maximum="24" Value="5" TickFrequency="1" ValueChanged="ThumbnailStyle_Changed" />
+                    <DockPanel Margin="0,7,0,2">
+                      <TextBlock Text="LINE SPACING" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailLineSpacingLabel" Text="8 px" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailLineSpacingSlider" Minimum="0" Maximum="80" Value="8" TickFrequency="2" ValueChanged="ThumbnailStyle_Changed" />
+                    <DockPanel Margin="0,7,0,2">
+                      <TextBlock Text="VERTICAL POSITION" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock x:Name="ThumbnailPositionLabel" Text="565 / 1920 px" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="ThumbnailPositionSlider" Minimum="250" Maximum="1300" Value="565" TickFrequency="10" ValueChanged="ThumbnailStyle_Changed" />
+                  </StackPanel>
+                </Expander>
                 <DockPanel Margin="0,8,0,2">
                   <CheckBox x:Name="OpeningMotionCheckBox" Content="Opening Video Motion Composite" VerticalAlignment="Center" Checked="OpeningMotion_Changed" Unchecked="OpeningMotion_Changed" ToolTip="Tambahkan animasi motion pop-in hook di awal video klip" />
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -470,6 +519,7 @@
                 <TextBox x:Name="QueueTitleBox" MaxLength="100" Margin="0,4,0,0" TextChanged="QueueMetadata_Changed" LostFocus="QueueMetadata_LostFocus" />
                 <TextBlock Text="DESCRIPTION" FontWeight="Bold" Margin="0,7,0,0" />
                 <TextBox x:Name="QueueDescriptionBox" MinHeight="55" MaxHeight="75" Margin="0,4,0,0" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="QueueMetadata_Changed" LostFocus="QueueMetadata_LostFocus" />
+                <Button x:Name="ResetQueueMetadataButton" Content="RESET TO VIDEO METADATA" HorizontalAlignment="Left" Margin="0,6,0,0" Padding="6,2" Click="ResetQueueMetadata_Click" />
               </StackPanel>
               <StackPanel Grid.Column="1">
                 <TextBlock Text="MANUAL PUBLISH TIME · WIB" FontWeight="Bold" TextWrapping="Wrap" />
@@ -494,7 +544,7 @@
 
     <Border x:Name="EditorFooter" Grid.Row="4" Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="9" Margin="0,8,0,0">
       <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /><ColumnDefinition Width="145" /><ColumnDefinition Width="95" /></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="120" /><ColumnDefinition Width="135" /><ColumnDefinition Width="145" /><ColumnDefinition Width="95" /></Grid.ColumnDefinitions>
         <StackPanel>
           <TextBlock Text="OUTPUT FOLDER" FontWeight="Bold" />
           <DockPanel Margin="0,3,8,0">
@@ -503,8 +553,9 @@
           </DockPanel>
         </StackPanel>
         <Button x:Name="OpenFolderButton" Grid.Column="1" Content="OPEN FOLDER" Margin="8,17,0,0" Height="32" Click="OpenFolderButton_Click" />
-        <Button x:Name="RenderButton" Grid.Column="2" Content="CREATE CLIP" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}" Margin="8,17,0,0" Height="32" Click="RenderButton_Click" IsEnabled="False" />
-        <Button x:Name="CancelButton" Grid.Column="3" Content="CANCEL" Margin="8,17,0,0" Height="32" Click="CancelButton_Click" IsEnabled="False" />
+        <Button x:Name="ClearOutputFolderButton" Grid.Column="2" Content="EMPTY FOLDER" Margin="8,17,0,0" Height="32" Click="ClearOutputFolderButton_Click" ToolTip="Delete everything inside the selected output folder after confirmation." />
+        <Button x:Name="RenderButton" Grid.Column="3" Content="CREATE CLIP" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}" Margin="8,17,0,0" Height="32" Click="RenderButton_Click" IsEnabled="False" />
+        <Button x:Name="CancelButton" Grid.Column="4" Content="CANCEL" Margin="8,17,0,0" Height="32" Click="CancelButton_Click" IsEnabled="False" />
       </Grid>
     </Border>
 

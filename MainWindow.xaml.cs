@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private ClipCandidate? _metadataEditingClip;
     private YouTubeUploadItem? _selectedUploadItem;
     private CancellationTokenSource? _thumbnailCts;
+    private CancellationTokenSource? _thumbnailPreviewCts;
+    private Task? _thumbnailPreviewTask;
     private bool _windowReady;
     private bool _updatingClipControls;
     private bool _settingManifestMode;
@@ -58,6 +60,7 @@ public partial class MainWindow : Window
         UpdateUploadQueueSummary();
         UpdatePublishSlotsSummary();
         FontBox.ItemsSource = SubtitleFonts.LoadOptions();
+        ThumbnailFontBox.ItemsSource = SubtitleFonts.LoadOptions();
         FontBox.SelectedItem = FontBox.Items.OfType<SubtitleFontOption>()
             .FirstOrDefault(option => option.FamilyName.Equals("Segoe UI", StringComparison.OrdinalIgnoreCase))
             ?? FontBox.Items.OfType<SubtitleFontOption>().FirstOrDefault();
@@ -77,15 +80,24 @@ public partial class MainWindow : Window
         ShortClipSubtitleCheckBox.IsChecked = _settings.UseShortClipSubtitles;
         LoadSavedSubtitlePresets();
         FramePathText.Text = string.IsNullOrWhiteSpace(_settings.FramePngPath) ? "No frame selected" : _settings.FramePngPath;
-        SetCombo(ThumbnailFontBox, string.IsNullOrWhiteSpace(_settings.ThumbnailFontName) ? "Anton" : _settings.ThumbnailFontName);
+        var initialThumbnailStyle = _settings.ThumbnailHookStyle ??= new ThumbnailHookStyle
+        {
+            FontName = string.IsNullOrWhiteSpace(_settings.ThumbnailFontName) ? "Anton" : _settings.ThumbnailFontName
+        };
+        if (string.IsNullOrWhiteSpace(initialThumbnailStyle.FontName))
+            initialThumbnailStyle.FontName = string.IsNullOrWhiteSpace(_settings.ThumbnailFontName) ? "Anton" : _settings.ThumbnailFontName;
+        SetThumbnailFont(initialThumbnailStyle.FontName, initialThumbnailStyle.FontFilePath);
+        ApplyThumbnailHookStyle(initialThumbnailStyle);
         SetCombo(OpeningMotionDurationBox, (_settings.OpeningMotionDurationSeconds > 0 ? _settings.OpeningMotionDurationSeconds : 2.0).ToString("0.0", Inv) + "s");
         OpeningMotionCheckBox.IsChecked = _settings.EnableOpeningMotion;
+        UpdateThumbnailStyleControlStates();
         Loaded += (_, _) =>
         {
             _windowReady = true;
             SaveTtsSettings();
             LoadFramePreview();
             UpdatePreview();
+            ScheduleThumbnailPreview();
         };
         WriteLog("Clipper 98 is ready.");
     }
@@ -118,7 +130,7 @@ public partial class MainWindow : Window
                 : $"{url}\ntarget_duration_seconds={seconds} narration={narration}\nRingkas video ini menjadi satu video utuh sekitar {seconds / 60} menit tanpa mempercepat. Jika target merusak alur, pertahankan konteks dan sarankan durasi lebih panjang. Buat narasi VO yang natural hanya jika diminta, sertakan judul dan deskripsi YouTube dengan minimal 5 hashtag relevan potensi viral, serta tentukan hero_frame_seconds dan thumbnail_hook (2-4 kata ALL CAPS).";
         }
 
-        var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 5;
+        var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 7;
         CandidateCountBox.Text = requested.ToString();
         return $"{url}\nrequested_candidate_count={requested}\nPilih {requested} kandidat klip pendek mandiri yang kuat; jangan menambah kandidat lemah. Jangan mengurangi jumlah hanya untuk mempersingkat jawaban: ringkas metadata dahulu. Tentukan hero_frame_seconds dan thumbnail_hook 2-4 kata ALL CAPS. Supaya seluruh hasil muat, buat hook, reason, dan caption masing-masing satu kalimat singkat (maksimal 15 kata), deskripsi satu kalimat singkat, dan tepat 5 hashtag. Jangan mengulang informasi antarfield. Utamakan semua {requested} kandidat valid dalam SATU manifest utuh. Pastikan semua kurung dan string tertutup sebelum menjawab.";
     }
@@ -432,7 +444,7 @@ public partial class MainWindow : Window
                     : $"STATUS: Rendering clip {index + 1}/{selected.Count}: {clip.Name}. Estimated batch time remaining: {TimeSpan.FromSeconds((DateTime.Now - batchStarted).TotalSeconds / index * (selected.Count - index)):mm\\:ss}.");
                 WorkProgress.IsIndeterminate = true;
                 var progress = new Progress<JobProgress>(p => OnRenderProgress(p, index, selected.Count));
-                var file = await RenderViaCliAsync(url, scan, clip, ReadStyle(), outputFolder, language, subtitleSource,
+                var file = await RenderViaCliAsync(url, scan, clip, ReadStyle(), ReadThumbnailHookStyle(), outputFolder, language, subtitleSource,
                     framePath, useSubtitles, preserveSourceAspect, useFourByFiveFrame, useNarration, ttsOptions, progress, cts.Token);
                 WorkProgress.IsIndeterminate = false;
                 WorkProgress.Value = (index + 1) * 100.0 / selected.Count;
@@ -497,7 +509,7 @@ public partial class MainWindow : Window
     }
 
     private async Task<string> RenderViaCliAsync(
-        string url, ScanResult scan, ClipCandidate clip, CaptionStyle style, string outputFolder,
+        string url, ScanResult scan, ClipCandidate clip, CaptionStyle style, ThumbnailHookStyle thumbnailStyle, string outputFolder,
         string language, string subtitleSource, string framePath, bool useSubtitles, bool preserveSourceAspect,
         bool useFourByFiveFrame, bool useNarration, TtsOptions ttsOptions,
         IProgress<JobProgress> progress, CancellationToken ct)
@@ -515,6 +527,8 @@ public partial class MainWindow : Window
         {
             Url = url,
             Title = scan.Title,
+            YouTubeTitle = clip.YouTubeTitle,
+            YouTubeDescription = clip.YouTubeDescription,
             Clip = new ClipperJobClip
             {
                 Id = clip.Name,
@@ -542,6 +556,7 @@ public partial class MainWindow : Window
             PreserveSourceAspectRatio = preserveSourceAspect,
             UseFourByFiveContentFrame = useFourByFiveFrame,
             CaptionStyle = style,
+            ThumbnailHookStyle = thumbnailStyle,
             OutputFolder = outputFolder,
             Language = language,
             SubtitleSource = subtitleSource,
@@ -655,10 +670,12 @@ public partial class MainWindow : Window
             HeroFrameTimeBox.Text = "00:00:00";
             OpeningMotionCheckBox.IsChecked = _settings.EnableOpeningMotion;
             SetCombo(OpeningMotionDurationBox, (_settings.OpeningMotionDurationSeconds > 0 ? _settings.OpeningMotionDurationSeconds : 2.0).ToString("0.0", Inv) + "s");
-            SetCombo(ThumbnailFontBox, string.IsNullOrWhiteSpace(_settings.ThumbnailFontName) ? "Anton" : _settings.ThumbnailFontName);
+            SetThumbnailFont(_settings.ThumbnailHookStyle?.FontName ?? _settings.ThumbnailFontName,
+                _settings.ThumbnailHookStyle?.FontFilePath);
             _updatingClipControls = false;
             UpdateModeDependentControls();
             UpdatePreview();
+            ScheduleThumbnailPreview();
             return;
         }
         SetUploadMetadataEditor(clip);
@@ -675,10 +692,12 @@ public partial class MainWindow : Window
         HeroFrameTimeBox.Text = TimeSpan.FromSeconds(heroSec).ToString(@"hh\:mm\:ss");
         OpeningMotionCheckBox.IsChecked = clip.EnableOpeningMotion;
         SetCombo(OpeningMotionDurationBox, (clip.OpeningMotionDurationSeconds > 0 ? clip.OpeningMotionDurationSeconds : 2.0).ToString("0.0", Inv) + "s");
-        SetCombo(ThumbnailFontBox, !string.IsNullOrWhiteSpace(clip.ThumbnailFontName) ? clip.ThumbnailFontName : "Anton");
+        SetThumbnailFont(_settings.ThumbnailHookStyle?.FontName ?? _settings.ThumbnailFontName,
+            _settings.ThumbnailHookStyle?.FontFilePath);
         TimestampEditPanel.Visibility = clip.KeptSegments.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
         _updatingClipControls = false;
         UpdatePreview();
+        ScheduleThumbnailPreview();
     }
 
     private string BuildCondensedDetail(ClipCandidate clip)
@@ -826,6 +845,61 @@ public partial class MainWindow : Window
         Process.Start(new ProcessStartInfo { FileName = OutputBox.Text, UseShellExecute = true });
     }
 
+    private void ClearOutputFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(OutputBox.Text))
+            {
+                WpfMessageBox.Show(this, "Pilih folder output Clipper terlebih dahulu.",
+                    "Folder output belum dipilih", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var outputPath = Path.GetFullPath(OutputBox.Text.Trim());
+            var rootPath = Path.GetPathRoot(outputPath);
+            var profilePath = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            if (string.Equals(outputPath, rootPath, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(outputPath, profilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                WpfMessageBox.Show(this, "Pilih folder output khusus Clipper, bukan root drive atau folder profil Windows.",
+                    "Folder tidak aman", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (!Directory.Exists(outputPath))
+            {
+                SetStatus("STATUS: Output folder does not exist yet.");
+                return;
+            }
+
+            var entries = Directory.GetFileSystemEntries(outputPath);
+            if (entries.Length == 0)
+            {
+                SetStatus("STATUS: Output folder is already empty.");
+                return;
+            }
+
+            var choice = WpfMessageBox.Show(this,
+                $"This will permanently delete {entries.Length} item(s) inside this folder, including all files and subfolders:\n\n{outputPath}\n\nThe folder itself will remain. This cannot be undone. Continue?",
+                "Empty output folder?", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (choice != MessageBoxResult.Yes) return;
+
+            foreach (var entry in entries)
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.Directory) != 0)
+                    Directory.Delete(entry, (attributes & FileAttributes.ReparsePoint) == 0);
+                else
+                    File.Delete(entry);
+            }
+            SetStatus($"STATUS: Emptied output folder ({entries.Length} item(s) deleted).");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("STATUS: Could not fully empty the output folder.", true);
+            WpfMessageBox.Show(this, ex.Message, "Empty output folder", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void WorkspaceMode_Click(object sender, RoutedEventArgs e)
     {
         SetWorkspaceMode(ReferenceEquals(sender, YouTubeModeButton));
@@ -857,6 +931,8 @@ public partial class MainWindow : Window
     private void AddRenderedClipToUploadQueue(string filePath, ClipCandidate clip)
     {
         var fullPath = Path.GetFullPath(filePath);
+        var originalTitle = clip.YouTubeTitle;
+        var originalDescription = clip.YouTubeDescription;
         var item = _uploadItems.FirstOrDefault(existing => !string.IsNullOrWhiteSpace(existing.FilePath)
             && string.Equals(Path.GetFullPath(existing.FilePath), fullPath, StringComparison.OrdinalIgnoreCase));
         if (item is null)
@@ -865,8 +941,11 @@ public partial class MainWindow : Window
             {
                 FilePath = fullPath,
                 ClipName = Path.GetFileName(fullPath),
-                Title = clip.YouTubeTitle,
-                Description = clip.YouTubeDescription,
+                OriginalTitle = originalTitle,
+                OriginalDescription = originalDescription,
+                HasEmbeddedMetadata = !string.IsNullOrWhiteSpace(originalTitle) || !string.IsNullOrWhiteSpace(originalDescription),
+                Title = originalTitle,
+                Description = originalDescription,
                 IsSelected = true
             };
             item.PropertyChanged += UploadItem_PropertyChanged;
@@ -875,8 +954,11 @@ public partial class MainWindow : Window
         else
         {
             item.IsSelected = true;
-            item.Title = clip.YouTubeTitle;
-            item.Description = clip.YouTubeDescription;
+            item.OriginalTitle = originalTitle;
+            item.OriginalDescription = originalDescription;
+            item.HasEmbeddedMetadata = !string.IsNullOrWhiteSpace(originalTitle) || !string.IsNullOrWhiteSpace(originalDescription);
+            item.Title = originalTitle;
+            item.Description = originalDescription;
         }
 
         UploadScheduleGrid.SelectedItem = item;
@@ -887,7 +969,7 @@ public partial class MainWindow : Window
         WriteLog("Finished render added to the YouTube queue: " + Path.GetFileName(fullPath));
     }
 
-    private void AddVideosToUploadQueue_Click(object sender, RoutedEventArgs e)
+    private async void AddVideosToUploadQueue_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new WpfOpenFileDialog
         {
@@ -907,11 +989,16 @@ public partial class MainWindow : Window
                 && string.Equals(Path.GetFullPath(item.FilePath), fullPath, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
+            var original = await VideoMetadataCodec.ReadAsync(fullPath);
             lastAdded = new YouTubeUploadItem
             {
                 FilePath = fullPath,
                 ClipName = Path.GetFileName(fullPath),
-                Title = Path.GetFileNameWithoutExtension(fullPath),
+                Title = original.Found ? original.Title : Path.GetFileNameWithoutExtension(fullPath),
+                Description = original.Description,
+                OriginalTitle = original.Title,
+                OriginalDescription = original.Description,
+                HasEmbeddedMetadata = original.Found,
                 IsSelected = true
             };
             lastAdded.PropertyChanged += UploadItem_PropertyChanged;
@@ -1058,6 +1145,7 @@ public partial class MainWindow : Window
 
         QueueTitleBox.IsEnabled = !isBusy && selectedCount == 1 && _selectedUploadItem is not null && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
         QueueDescriptionBox.IsEnabled = !isBusy && selectedCount == 1 && _selectedUploadItem is not null && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        ResetQueueMetadataButton.IsEnabled = !isBusy && selectedCount == 1 && _selectedUploadItem?.HasEmbeddedMetadata == true && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
         PublishDatePicker.IsEnabled = hasEditableItem;
         PublishTimeBox.IsEnabled = hasEditableItem;
         SetPublishTimeButton.IsEnabled = hasEditableItem;
@@ -1359,6 +1447,20 @@ public partial class MainWindow : Window
         if (_selectedUploadItem is null || _loadingQueueMetadata || UploadScheduleGrid.SelectedItems.Count > 1) return;
         _selectedUploadItem.Title = QueueTitleBox.Text.Trim();
         _selectedUploadItem.Description = QueueDescriptionBox.Text.Trim();
+    }
+
+    private void ResetQueueMetadata_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedUploadItem is null || !_selectedUploadItem.HasEmbeddedMetadata) return;
+        _loadingQueueMetadata = true;
+        _selectedUploadItem.Title = _selectedUploadItem.OriginalTitle;
+        _selectedUploadItem.Description = _selectedUploadItem.OriginalDescription;
+        QueueTitleBox.Text = _selectedUploadItem.OriginalTitle;
+        QueueDescriptionBox.Text = _selectedUploadItem.OriginalDescription;
+        _loadingQueueMetadata = false;
+        PersistUploadQueue();
+        UploadScheduleGrid.Items.Refresh();
+        UpdateQueueActionButtons();
     }
 
     private void UploadSelection_Click(object sender, RoutedEventArgs e)
@@ -1680,6 +1782,7 @@ public partial class MainWindow : Window
             && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
         QueueTitleBox.IsEnabled = canEditMetadata;
         QueueDescriptionBox.IsEnabled = canEditMetadata;
+        ResetQueueMetadataButton.IsEnabled = canEditMetadata && _selectedUploadItem?.HasEmbeddedMetadata == true;
         PublishDatePicker.IsEnabled = canEditMetadata;
         PublishTimeBox.IsEnabled = canEditMetadata;
         AutoScheduleButton.IsEnabled = !busy;
@@ -1898,6 +2001,8 @@ public partial class MainWindow : Window
             PreviewBackdrop.Source = null;
             PreviewFullFrame.Source = null;
             PreviewBackdrop.Effect = null;
+            _thumbnailPreviewCts?.Cancel();
+            PreviewThumbnailImage.Source = null;
             PreviewPlaceholder.Visibility = Visibility.Visible;
             UpdatePreview();
             return;
@@ -1905,6 +2010,7 @@ public partial class MainWindow : Window
         SetStatus("STATUS: URL ready. Copy the Gemini prompt or import a .py manifest.");
         var id = YouTubeVideoId(UrlBox.Text.Trim());
         if (id.Length > 0) await LoadYouTubeThumbnailAsync(id);
+        ScheduleThumbnailPreview();
     }
 
     private async Task LoadYouTubeThumbnailAsync(string videoId)
@@ -1929,6 +2035,7 @@ public partial class MainWindow : Window
             PreviewFullFrame.Source = bitmap;
             PreviewPlaceholder.Visibility = Visibility.Collapsed;
             UpdatePreview();
+            ScheduleThumbnailPreview();
         }
         catch (OperationCanceledException) { }
         catch
@@ -2065,7 +2172,12 @@ public partial class MainWindow : Window
             var name = tag[6..];
             var saved = _settings.SubtitlePresets.FirstOrDefault(preset =>
                 preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            if (saved is not null) ApplyCaptionStyle(saved.Style);
+            if (saved is not null)
+            {
+                ApplyCaptionStyle(saved.Style);
+                if (saved.ThumbnailHookStyle is not null)
+                    ApplyThumbnailHookStyle(saved.ThumbnailHookStyle);
+            }
         }
         else switch (PresetBox.SelectedIndex)
         {
@@ -2077,7 +2189,9 @@ public partial class MainWindow : Window
                 SetFontFamily("Segoe UI"); SetCombo(FontStyleBox, "bold"); SetCombo(TextColorBox, "White"); FontSizeSlider.Value = 100; OutlineSlider.Value = 5; HighlightBox.IsChecked = true; SetCombo(HighlightColorBox, "Yellow"); break;
         }
         UpdatePresetDeleteButton();
+        SettingsStore.Save(_settings);
         UpdatePreview();
+        ScheduleThumbnailPreview();
     }
 
     private void LoadSavedSubtitlePresets()
@@ -2107,12 +2221,19 @@ public partial class MainWindow : Window
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
-        var saved = new SubtitleStylePreset { Name = name, Style = CopyStyle(ReadStyle()) };
+        ValidateCustomColors();
+        var saved = new SubtitleStylePreset
+        {
+            Name = name,
+            Style = CopyStyle(ReadStyle()),
+            ThumbnailHookStyle = CopyThumbnailHookStyle(ReadThumbnailHookStyle())
+        };
         if (existing is null) _settings.SubtitlePresets.Add(saved);
         else
         {
             existing.Name = name;
             existing.Style = saved.Style;
+            existing.ThumbnailHookStyle = saved.ThumbnailHookStyle;
         }
         SettingsStore.Save(_settings);
         var item = PresetBox.Items.OfType<ComboBoxItem>().FirstOrDefault(option =>
@@ -2125,8 +2246,9 @@ public partial class MainWindow : Window
         PresetBox.SelectedItem = item;
         PresetNameBox.Clear();
         UpdatePresetDeleteButton();
-        WriteLog($"Subtitle preset “{name}” saved.");
+        WriteLog($"Editor preset “{name}” saved, including thumbnail hook styling.");
         SetStatus($"STATUS: Preset “{name}” saved.");
+        ScheduleThumbnailPreview();
     }
 
     private void DeletePresetButton_Click(object sender, RoutedEventArgs e)
@@ -2168,6 +2290,144 @@ public partial class MainWindow : Window
         SetCombo(MaxLinesBox, style.WordByWord ? "word" : style.MaxLines.ToString());
         SetCombo(TextCaseBox, style.TextCase);
         PositionYSlider.Value = Math.Clamp(style.PositionY, (int)PositionYSlider.Minimum, (int)PositionYSlider.Maximum);
+    }
+
+    private void ApplyThumbnailHookStyle(ThumbnailHookStyle style)
+    {
+        if (style is null) style = new ThumbnailHookStyle();
+        var wasUpdating = _updatingClipControls;
+        _updatingClipControls = true;
+        SetThumbnailFont(string.IsNullOrWhiteSpace(style.FontName) ? "Anton" : style.FontName, style.FontFilePath);
+        ThumbnailHookEnabledCheckBox.IsChecked = style.HookEnabled;
+        ThumbnailFontSizeSlider.Value = Math.Clamp(style.FontSize, (int)ThumbnailFontSizeSlider.Minimum, (int)ThumbnailFontSizeSlider.Maximum);
+        ThumbnailFirstLineColorBox.Text = style.FirstLineColor;
+        ThumbnailSecondLineColorBox.Text = style.SecondLineColor;
+        ThumbnailOutlineColorBox.Text = style.OutlineColor;
+        ThumbnailOutlineSizeSlider.Value = Math.Clamp(style.OutlineSize, (int)ThumbnailOutlineSizeSlider.Minimum, (int)ThumbnailOutlineSizeSlider.Maximum);
+        ThumbnailShadowCheckBox.IsChecked = style.ShadowEnabled;
+        ThumbnailShadowColorBox.Text = style.ShadowColor;
+        ThumbnailShadowOpacitySlider.Value = Math.Clamp(style.ShadowOpacity * 100, ThumbnailShadowOpacitySlider.Minimum, ThumbnailShadowOpacitySlider.Maximum);
+        ThumbnailShadowBlurSlider.Value = Math.Clamp(style.ShadowBlur, (int)ThumbnailShadowBlurSlider.Minimum, (int)ThumbnailShadowBlurSlider.Maximum);
+        ThumbnailShadowOffsetSlider.Value = Math.Clamp(style.ShadowOffset, (int)ThumbnailShadowOffsetSlider.Minimum, (int)ThumbnailShadowOffsetSlider.Maximum);
+        ThumbnailBadgeCheckBox.IsChecked = style.BadgeEnabled;
+        ThumbnailBadgeColorBox.Text = style.BadgeColor;
+        SetCombo(ThumbnailBadgeShapeBox, style.BadgeShape);
+        ThumbnailLineSpacingSlider.Value = Math.Clamp(style.LineSpacing, (int)ThumbnailLineSpacingSlider.Minimum, (int)ThumbnailLineSpacingSlider.Maximum);
+        ThumbnailPositionSlider.Value = Math.Clamp(style.PositionY, (int)ThumbnailPositionSlider.Minimum, (int)ThumbnailPositionSlider.Maximum);
+        _updatingClipControls = wasUpdating;
+        _settings.ThumbnailHookStyle = CopyThumbnailHookStyle(style);
+        _settings.ThumbnailFontName = style.FontName;
+        UpdateThumbnailStyleLabels();
+        UpdateThumbnailStyleControlStates();
+        UpdatePreview();
+    }
+
+    private static ThumbnailHookStyle CopyThumbnailHookStyle(ThumbnailHookStyle style) => new()
+    {
+        FontName = style.FontName,
+        FontFilePath = style.FontFilePath,
+        HookEnabled = style.HookEnabled,
+        FontSize = style.FontSize,
+        FirstLineColor = style.FirstLineColor,
+        SecondLineColor = style.SecondLineColor,
+        OutlineColor = style.OutlineColor,
+        OutlineSize = style.OutlineSize,
+        ShadowEnabled = style.ShadowEnabled,
+        ShadowColor = style.ShadowColor,
+        ShadowBlur = style.ShadowBlur,
+        ShadowOffset = style.ShadowOffset,
+        ShadowOpacity = style.ShadowOpacity,
+        BadgeEnabled = style.BadgeEnabled,
+        BadgeColor = style.BadgeColor,
+        BadgeShape = style.BadgeShape,
+        LineSpacing = style.LineSpacing,
+        PositionY = style.PositionY
+    };
+
+    private ThumbnailHookStyle ReadThumbnailHookStyle() => new()
+    {
+        FontName = (ThumbnailFontBox?.SelectedItem as SubtitleFontOption)?.FamilyName ?? "Anton",
+        FontFilePath = (ThumbnailFontBox?.SelectedItem as SubtitleFontOption)?.FilePath ?? string.Empty,
+        HookEnabled = ThumbnailHookEnabledCheckBox?.IsChecked == true,
+        FontSize = (int)(ThumbnailFontSizeSlider?.Value ?? 128),
+        FirstLineColor = ReadHexColor(ThumbnailFirstLineColorBox, "#FFFFFF"),
+        SecondLineColor = ReadHexColor(ThumbnailSecondLineColorBox, "#FFF000"),
+        OutlineColor = ReadHexColor(ThumbnailOutlineColorBox, "#000000"),
+        OutlineSize = (int)(ThumbnailOutlineSizeSlider?.Value ?? 12),
+        ShadowEnabled = ThumbnailShadowCheckBox?.IsChecked == true,
+        ShadowColor = ReadHexColor(ThumbnailShadowColorBox, "#000000"),
+        ShadowBlur = (int)(ThumbnailShadowBlurSlider?.Value ?? 7),
+        ShadowOffset = (int)(ThumbnailShadowOffsetSlider?.Value ?? 5),
+        ShadowOpacity = (ThumbnailShadowOpacitySlider?.Value ?? 80) / 100,
+        BadgeEnabled = ThumbnailBadgeCheckBox?.IsChecked == true,
+        BadgeColor = ReadHexColor(ThumbnailBadgeColorBox, "#D9232E"),
+        BadgeShape = SelectedText(ThumbnailBadgeShapeBox, "rectangle"),
+        LineSpacing = (int)(ThumbnailLineSpacingSlider?.Value ?? 8),
+        PositionY = (int)(ThumbnailPositionSlider?.Value ?? 565)
+    };
+
+    private static string ReadHexColor(System.Windows.Controls.TextBox? box, string fallback)
+    {
+        var value = box?.Text.Trim() ?? fallback;
+        return System.Text.RegularExpressions.Regex.IsMatch(value, @"^#[0-9A-Fa-f]{6}$")
+            ? value.ToUpperInvariant()
+            : fallback;
+    }
+
+    private void ThumbnailStyle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_windowReady || _updatingClipControls) return;
+        var style = ReadThumbnailHookStyle();
+        _settings.ThumbnailHookStyle = style;
+        _settings.ThumbnailFontName = style.FontName;
+        SettingsStore.Save(_settings);
+        UpdateThumbnailStyleLabels();
+        UpdateThumbnailStyleControlStates();
+        if (SelectedText(PreviewModeBox, "thumbnail") != "thumbnail")
+            SetCombo(PreviewModeBox, "thumbnail");
+        UpdatePreview();
+        ScheduleThumbnailPreview();
+    }
+
+    private void UpdateThumbnailStyleLabels()
+    {
+        var style = ReadThumbnailHookStyle();
+        ThumbnailFontSizeLabel.Text = $"{style.FontSize} px";
+        ThumbnailOutlineSizeLabel.Text = $"{style.OutlineSize} px";
+        ThumbnailShadowBlurLabel.Text = $"{style.ShadowBlur} px";
+        ThumbnailShadowOffsetLabel.Text = $"{style.ShadowOffset} px";
+        ThumbnailShadowOpacityLabel.Text = $"{style.ShadowOpacity:P0}";
+        ThumbnailLineSpacingLabel.Text = $"{style.LineSpacing} px";
+        ThumbnailPositionLabel.Text = $"{style.PositionY} / 1920 px";
+    }
+
+    private void UpdateThumbnailStyleControlStates()
+    {
+        var hasHook = ThumbnailHookEnabledCheckBox.IsChecked == true;
+        ThumbnailHookBox.IsEnabled = hasHook && _cts is null;
+        ThumbnailFontBox.IsEnabled = hasHook && _cts is null;
+        ThumbnailStylePanel.IsEnabled = hasHook && _cts is null;
+        OpeningMotionCheckBox.IsEnabled = hasHook && _cts is null;
+        OpeningMotionDurationBox.IsEnabled = hasHook && OpeningMotionCheckBox.IsChecked == true && _cts is null;
+        var hasBadge = ThumbnailBadgeCheckBox.IsChecked == true;
+        ThumbnailBadgeShapeBox.IsEnabled = hasBadge;
+        ThumbnailBadgeColorBox.IsEnabled = hasBadge;
+        var hasShadow = ThumbnailShadowCheckBox.IsChecked == true;
+        ThumbnailShadowBlurSlider.IsEnabled = hasShadow;
+        ThumbnailShadowOffsetSlider.IsEnabled = hasShadow;
+        ThumbnailShadowColorBox.IsEnabled = hasShadow;
+        ThumbnailShadowOpacitySlider.IsEnabled = hasShadow;
+    }
+
+    private void SetThumbnailFont(string familyName, string? filePath = null)
+    {
+        var options = ThumbnailFontBox.Items.OfType<SubtitleFontOption>().ToList();
+        ThumbnailFontBox.SelectedItem = options.FirstOrDefault(option =>
+                !string.IsNullOrWhiteSpace(filePath)
+                && string.Equals(option.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            ?? options.FirstOrDefault(option => option.FamilyName.Equals(familyName, StringComparison.OrdinalIgnoreCase))
+            ?? options.FirstOrDefault(option => option.FamilyName.Equals("Anton", StringComparison.OrdinalIgnoreCase))
+            ?? options.FirstOrDefault();
     }
 
     private static CaptionStyle CopyStyle(CaptionStyle style) => new()
@@ -2265,6 +2525,16 @@ public partial class MainWindow : Window
         if (SelectedText(HighlightColorBox, "Yellow") == "custom"
             && !System.Text.RegularExpressions.Regex.IsMatch(HighlightColorHexBox.Text.Trim(), @"^#[0-9A-Fa-f]{6}$"))
             throw new InvalidOperationException("Custom highlight colors must use HEX format #RRGGBB.");
+        foreach (var color in new[]
+                 {
+                     ThumbnailFirstLineColorBox.Text,
+                     ThumbnailSecondLineColorBox.Text,
+                     ThumbnailOutlineColorBox.Text,
+                     ThumbnailShadowColorBox.Text,
+                     ThumbnailBadgeColorBox.Text
+                 })
+            if (!System.Text.RegularExpressions.Regex.IsMatch(color.Trim(), @"^#[0-9A-Fa-f]{6}$"))
+                throw new InvalidOperationException("Thumbnail hook colors must use HEX format #RRGGBB.");
     }
 
     private static string ColorToHex(string value) => value switch
@@ -2287,43 +2557,136 @@ public partial class MainWindow : Window
         var subtitlesDisabled = IsCondensedMode
             ? CondensedSubtitleCheckBox.IsChecked != true
             : ShortClipSubtitleCheckBox.IsChecked != true;
-        PreviewCaption.Visibility = subtitlesDisabled
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-
         var preserveFullFrame = ClipList.SelectedItem is ClipCandidate clip && clip.PreserveFullFrame;
         PreviewBackdrop.Effect = preserveFullFrame ? new System.Windows.Media.Effects.BlurEffect { Radius = 18 } : null;
         PreviewFullFrame.Source = PreviewBackdrop.Source;
-        PreviewFullFrame.Visibility = preserveFullFrame && PreviewBackdrop.Source is not null
+        Canvas.SetTop(PreviewCaption, 0);
+        var thumbnailMode = SelectedText(PreviewModeBox, "thumbnail") == "thumbnail";
+        PreviewBackdrop.Visibility = thumbnailMode ? Visibility.Collapsed : Visibility.Visible;
+        PreviewFrame.Visibility = thumbnailMode ? Visibility.Collapsed : Visibility.Visible;
+        PreviewFullFrame.Visibility = !thumbnailMode && preserveFullFrame && PreviewBackdrop.Source is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        PreviewThumbnailImage.Visibility = thumbnailMode && PreviewThumbnailImage.Source is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        PreviewCaption.Visibility = !thumbnailMode && !subtitlesDisabled
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        Canvas.SetTop(PreviewCaption, 0);
-        PreviewPlaceholder.Visibility = PreviewBackdrop.Source is null ? Visibility.Visible : Visibility.Collapsed;
-
-        if (PreviewHookBadge is not null && PreviewHookLine1 is not null && PreviewHookLine2 is not null)
+        if (thumbnailMode)
         {
-            var rawHook = ClipList.SelectedItem is ClipCandidate activeCandidate && !string.IsNullOrWhiteSpace(activeCandidate.ThumbnailHook)
-                ? activeCandidate.ThumbnailHook
-                : ThumbnailHookBox?.Text;
-            if (!string.IsNullOrWhiteSpace(rawHook))
-            {
-                var fontName = (ClipList.SelectedItem as ClipCandidate)?.ThumbnailFontName ?? SelectedText(ThumbnailFontBox, "Anton");
-                var family = new System.Windows.Media.FontFamily(fontName + ", Impact, Segoe UI Black");
-                PreviewHookLine1.FontFamily = family;
-                PreviewHookLine2.FontFamily = family;
+            PreviewPlaceholder.Visibility = PreviewThumbnailImage.Source is null ? Visibility.Visible : Visibility.Collapsed;
+            PreviewPlaceholderStatusText.Text = ClipList.SelectedItem is null
+                ? "Select a clip to render its exact thumbnail preview."
+                : "Preparing a thumbnail from the selected clip frame...";
+            PreviewStatusText.Text = PreviewThumbnailImage.Source is null
+                ? "Loading exact 9:16 thumbnail..."
+                : "Exact rendered thumbnail · 1080 × 1920";
+            return;
+        }
 
-                var (l1, l2) = ThumbnailComposer.SplitHookWords(rawHook);
-                PreviewHookLine1.Text = l1;
-                PreviewHookLine2.Text = l2;
-                PreviewHookLine2.Visibility = string.IsNullOrWhiteSpace(l2) ? Visibility.Collapsed : Visibility.Visible;
-                Canvas.SetTop(PreviewHookBadge, string.IsNullOrWhiteSpace(l2) ? 90 : 70);
-                PreviewHookBadge.Visibility = Visibility.Visible;
-            }
-            else
+        PreviewThumbnailImage.Visibility = Visibility.Collapsed;
+        PreviewPlaceholder.Visibility = PreviewBackdrop.Source is null ? Visibility.Visible : Visibility.Collapsed;
+        PreviewPlaceholderStatusText.Text = "Enter a YouTube URL or import a Gemini manifest to preview the video frame.";
+        PreviewStatusText.Text = "Video frame and subtitle preview";
+    }
+
+    private void PreviewMode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_windowReady) return;
+        UpdatePreview();
+        ScheduleThumbnailPreview();
+    }
+
+    private void ScheduleThumbnailPreview()
+    {
+        _thumbnailPreviewCts?.Cancel();
+        if (!_windowReady || _cts is not null || SelectedText(PreviewModeBox, "thumbnail") != "thumbnail") return;
+        PreviewThumbnailImage.Source = null;
+        PreviewPlaceholderStatusText.Text = "Preparing the thumbnail preview from the selected clip frame...";
+        PreviewStatusText.Text = "Preparing exact thumbnail...";
+        UpdatePreview();
+        var cancellation = new CancellationTokenSource();
+        _thumbnailPreviewCts = cancellation;
+        _thumbnailPreviewTask = RefreshThumbnailPreviewAsync(cancellation);
+    }
+
+    private async Task RefreshThumbnailPreviewAsync(CancellationTokenSource cancellation)
+    {
+        var ct = cancellation.Token;
+        try
+        {
+            await Task.Delay(350, ct);
+            if (ClipList.SelectedItem is not ClipCandidate clip || _scan is null || !IsYouTubeUrl(UrlBox.Text.Trim()))
             {
-                PreviewHookBadge.Visibility = Visibility.Collapsed;
+                PreviewThumbnailImage.Source = null;
+                PreviewStatusText.Text = "Select a clip to render its exact thumbnail preview.";
+                PreviewPlaceholderStatusText.Text = "Import a Gemini manifest and select a clip.";
+                UpdatePreview();
+                return;
             }
+
+            PreviewThumbnailImage.Source = null;
+            PreviewPlaceholderStatusText.Text = "Preparing the exact thumbnail frame. The clip is downloaded once and cached for rendering...";
+            PreviewStatusText.Text = "Preparing exact thumbnail...";
+            UpdatePreview();
+
+            var progress = new Progress<JobProgress>(item =>
+            {
+                if (ct.IsCancellationRequested || !ReferenceEquals(_thumbnailPreviewCts, cancellation)) return;
+                if (item.Kind == ProgressKind.Download && item.Percent is { } percent)
+                    PreviewPlaceholderStatusText.Text = $"Downloading selected clip for exact preview · {percent:0}%";
+            });
+            var condensed = _manifest?.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase) == true;
+            var preserveSourceAspect = condensed && SelectedText(CondensedAspectBox, "source") == "source";
+            var useFourByFive = condensed && !preserveSourceAspect;
+            var hookText = !string.IsNullOrWhiteSpace(clip.ThumbnailHook)
+                ? clip.ThumbnailHook
+                : !string.IsNullOrWhiteSpace(clip.Hook) ? clip.Hook : "KLIP TERBAIK";
+            var previewClip = new ClipCandidate
+            {
+                Name = clip.Name,
+                Start = clip.Start,
+                End = clip.End,
+                HeroFrameSeconds = clip.HeroFrameSeconds,
+                ThumbnailHook = hookText,
+                ThumbnailFontName = ReadThumbnailHookStyle().FontName,
+                EnableOpeningMotion = clip.EnableOpeningMotion,
+                OpeningMotionDurationSeconds = clip.OpeningMotionDurationSeconds,
+                PreserveFullFrame = clip.PreserveFullFrame,
+                KeptSegments = clip.KeptSegments
+            };
+            var bytes = await _pipeline.RenderThumbnailPreviewAsync(
+                UrlBox.Text.Trim(), previewClip, hookText, ReadThumbnailHookStyle(), preserveSourceAspect,
+                useFourByFive, progress, ct);
+            if (ct.IsCancellationRequested || !ReferenceEquals(_thumbnailPreviewCts, cancellation)) return;
+            using var stream = new MemoryStream(bytes);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            PreviewThumbnailImage.Source = bitmap;
+            PreviewStatusText.Text = "Exact rendered thumbnail · 1080 × 1920";
+            UpdatePreview();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(_thumbnailPreviewCts, cancellation))
+            {
+                PreviewThumbnailImage.Source = null;
+                PreviewStatusText.Text = "Thumbnail preview unavailable";
+                PreviewPlaceholderStatusText.Text = "Could not build exact thumbnail: " + ex.Message;
+                UpdatePreview();
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_thumbnailPreviewCts, cancellation)) _thumbnailPreviewCts = null;
+            cancellation.Dispose();
         }
     }
 
@@ -2374,6 +2737,7 @@ public partial class MainWindow : Window
 
     private void ToggleBusy(bool busy)
     {
+        if (busy) _thumbnailPreviewCts?.Cancel();
         UrlBox.IsEnabled = !busy;
         ProcessingModeBox.IsEnabled = !busy;
         TargetDurationBox.IsEnabled = !busy;
@@ -2407,19 +2771,24 @@ public partial class MainWindow : Window
         MaxLinesBox.IsEnabled = !busy;
         PositionYSlider.IsEnabled = !busy;
         ThumbnailExpander.IsEnabled = !busy;
+        ThumbnailStylePanel.IsEnabled = !busy;
         ThumbnailHookBox.IsEnabled = !busy;
         ThumbnailFontBox.IsEnabled = !busy;
+        PreviewModeBox.IsEnabled = !busy;
         HeroFrameTimeBox.IsEnabled = !busy;
         OpeningMotionCheckBox.IsEnabled = !busy;
         OpeningMotionDurationBox.IsEnabled = !busy;
         YouTubeMetadataExpander.IsEnabled = !busy;
         RenderButton.IsEnabled = !busy && ClipList.SelectedItem is not null;
+        ClearOutputFolderButton.IsEnabled = !busy;
         CancelButton.IsEnabled = busy;
         SetupButton.IsEnabled = !busy;
         EditorModeButton.IsEnabled = !busy;
         YouTubeModeButton.IsEnabled = !busy;
         UpdateModeDependentControls();
         if (!busy) UpdateUploadMetadataCounters();
+        UpdateThumbnailStyleControlStates();
+        if (!busy) ScheduleThumbnailPreview();
         Cursor = busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
     }
 
@@ -2466,6 +2835,7 @@ public partial class MainWindow : Window
         if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
         clip.ThumbnailHook = ThumbnailHookBox.Text.Trim();
         UpdatePreview();
+        ScheduleThumbnailPreview();
     }
 
     private void ThumbnailHook_LostFocus(object sender, RoutedEventArgs e)
@@ -2474,17 +2844,29 @@ public partial class MainWindow : Window
         clip.ThumbnailHook = ThumbnailHookBox.Text.Trim();
         SaveManifestEdits();
         UpdatePreview();
+        ScheduleThumbnailPreview();
     }
 
     private void ThumbnailFontBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var font = (ThumbnailFontBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Anton";
-        _settings.ThumbnailFontName = font;
+        var selectedFont = ThumbnailFontBox.SelectedItem as SubtitleFontOption;
+        if (selectedFont is null) return;
+        if (!_windowReady || _updatingClipControls) return;
+        var style = ReadThumbnailHookStyle();
+        style.FontName = selectedFont.FamilyName;
+        style.FontFilePath = selectedFont.FilePath;
+        _settings.ThumbnailHookStyle = style;
+        _settings.ThumbnailFontName = selectedFont.FamilyName;
         SettingsStore.Save(_settings);
-        if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
-        clip.ThumbnailFontName = font;
-        SaveManifestEdits();
+        if (ClipList.SelectedItem is ClipCandidate clip)
+        {
+            clip.ThumbnailFontName = selectedFont.FamilyName;
+            SaveManifestEdits();
+        }
+        UpdateThumbnailStyleLabels();
+        if (SelectedText(PreviewModeBox, "thumbnail") != "thumbnail") SetCombo(PreviewModeBox, "thumbnail");
         UpdatePreview();
+        ScheduleThumbnailPreview();
     }
 
     private void OpeningMotionDuration_Changed(object sender, SelectionChangedEventArgs e)
@@ -2508,6 +2890,7 @@ public partial class MainWindow : Window
             clip.HeroFrameSeconds = ts.TotalSeconds;
         else if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var sec))
             clip.HeroFrameSeconds = sec;
+        ScheduleThumbnailPreview();
     }
 
     private void HeroFrame_LostFocus(object sender, RoutedEventArgs e)
@@ -2519,6 +2902,7 @@ public partial class MainWindow : Window
         else if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var sec))
             clip.HeroFrameSeconds = sec;
         SaveManifestEdits();
+        ScheduleThumbnailPreview();
     }
 
     private void OpeningMotion_Changed(object sender, RoutedEventArgs e)
@@ -2529,6 +2913,7 @@ public partial class MainWindow : Window
         if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
         clip.EnableOpeningMotion = isChecked;
         SaveManifestEdits();
+        UpdateThumbnailStyleControlStates();
     }
 
     private void SetStatus(string message, bool error = false)

@@ -87,8 +87,8 @@ public sealed class ComponentDownloadService
         var archive = Path.Combine(Path.GetTempPath(), $"clipper-ffmpeg-{Guid.NewGuid():N}.zip");
         try
         {
-            await DownloadFileAsync("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
-                archive, "ffmpeg.exe", progress, cancellationToken);
+            var ffmpegUrl = await GetLatestFfmpegArchiveUrlAsync(cancellationToken);
+            await DownloadFileAsync(ffmpegUrl, archive, "ffmpeg.exe", progress, cancellationToken);
             using var zip = ZipFile.OpenRead(archive);
             var entry = zip.Entries.FirstOrDefault(item =>
                 item.FullName.Replace('\\', '/').EndsWith("/bin/ffmpeg.exe", StringComparison.OrdinalIgnoreCase));
@@ -99,6 +99,22 @@ public sealed class ComponentDownloadService
             await input.CopyToAsync(output, cancellationToken);
         }
         finally { TryDelete(archive); }
+    }
+
+    private static async Task<string> GetLatestFfmpegArchiveUrlAsync(CancellationToken cancellationToken)
+    {
+        using var response = await Http.GetAsync("https://api.github.com/repos/GyanD/codexffmpeg/releases/latest",
+            HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        foreach (var asset in document.RootElement.GetProperty("assets").EnumerateArray())
+        {
+            var name = asset.GetProperty("name").GetString();
+            if (name is not null && name.EndsWith("essentials_build.zip", StringComparison.OrdinalIgnoreCase))
+                return asset.GetProperty("browser_download_url").GetString()!;
+        }
+        throw new InvalidDataException("Gyan.dev's GitHub mirror has no FFmpeg essentials ZIP asset.");
     }
 
     private static async Task DownloadWhisperCliAsync(

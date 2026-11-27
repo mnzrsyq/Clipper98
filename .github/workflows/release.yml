@@ -9,7 +9,7 @@ on:
       version:
         description: Release version, for example 1.1.0
         required: true
-        default: 1.1.1
+        default: 1.1.2
 
 permissions:
   contents: write
@@ -43,6 +43,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $installer = "artifacts/installer/Clipper98-Setup-v$env:CLIPPER98_VERSION.exe"
-          gh release create "v$env:CLIPPER98_VERSION" $installer `
-            --title "Clipper98 v$env:CLIPPER98_VERSION" `
-            --generate-notes
+          $notes = "docs/releases/v$env:CLIPPER98_VERSION.md"
+          if (Test-Path $notes) {
+            gh release create "v$env:CLIPPER98_VERSION" $installer `
+              --title "Clipper98 v$env:CLIPPER98_VERSION" `
+              --notes-file $notes
+          } else {
+            gh release create "v$env:CLIPPER98_VERSION" $installer `
+              --title "Clipper98 v$env:CLIPPER98_VERSION" `
+              --generate-notes
+          }
