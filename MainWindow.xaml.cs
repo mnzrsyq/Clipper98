@@ -120,7 +120,7 @@ public partial class MainWindow : Window
 
         var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 5;
         CandidateCountBox.Text = requested.ToString();
-        return $"{url}\nrequested_candidate_count={requested}\nPilih {requested} kandidat klip pendek yang mandiri. Untuk setiap kandidat, tentukan detik visual terbaik (hero_frame_seconds) dan hook thumbnail (thumbnail_hook 2-4 kata ALL CAPS), serta sertakan judul YouTube maksimal 100 karakter, deskripsi siap tempel, dan minimal 5 hashtag relevan potensi viral.";
+        return $"{url}\nrequested_candidate_count={requested}\nPilih {requested} kandidat klip pendek mandiri yang kuat; jangan menambah kandidat lemah. Jangan mengurangi jumlah hanya untuk mempersingkat jawaban: ringkas metadata dahulu. Tentukan hero_frame_seconds dan thumbnail_hook 2-4 kata ALL CAPS. Supaya seluruh hasil muat, buat hook, reason, dan caption masing-masing satu kalimat singkat (maksimal 15 kata), deskripsi satu kalimat singkat, dan tepat 5 hashtag. Jangan mengulang informasi antarfield. Utamakan semua {requested} kandidat valid dalam SATU manifest utuh. Pastikan semua kurung dan string tertutup sebelum menjawab.";
     }
 
     private bool IsCondensedMode => SelectedText(ProcessingModeBox, "short_clips") == "condense";
@@ -296,12 +296,16 @@ public partial class MainWindow : Window
         try
         {
             ToggleBusy(true);
+            var loaded = ClipperJobScript.Load(dialog.FileName);
+            if (loaded.Warning is not null
+                && WpfMessageBox.Show(this, loaded.Warning, "Manifest terpotong", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+
             ClipList.ItemsSource = null;
             _clips.Clear();
             _scan = null;
             _manifest = null;
             _manifestPath = null;
-            var loaded = ClipperJobScript.Load(dialog.FileName);
             _settingManifestMode = true;
             _manifest = loaded.Manifest;
             _manifestPath = dialog.FileName;
@@ -942,6 +946,10 @@ public partial class MainWindow : Window
         try
         {
             var loaded = ClipperJobScript.Load(dialog.FileName);
+            if (loaded.Warning is not null
+                && WpfMessageBox.Show(this, loaded.Warning, "Manifest terpotong", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+
             var outputFolder = OutputBox.Text;
             var outputFiles = Directory.Exists(outputFolder)
                 ? Directory.EnumerateFiles(outputFolder, "*.mp4", SearchOption.TopDirectoryOnly).ToList()

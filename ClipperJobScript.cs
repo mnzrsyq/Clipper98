@@ -9,7 +9,7 @@ public static class ClipperJobScript
     private static readonly Regex Assignment = new(@"\ACLIPPER_JOB\s*=\s*", RegexOptions.Compiled);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public static (ClipperJobManifest Manifest, List<ClipCandidate> Clips) Load(string path)
+    public static (ClipperJobManifest Manifest, List<ClipCandidate> Clips, string? Warning) Load(string path)
     {
         var source = File.ReadAllText(path).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
         var assignment = Assignment.Match(source);
@@ -17,16 +17,31 @@ public static class ClipperJobScript
             throw new InvalidOperationException("This file does not use the CLIPPER_JOB format. Use the current Clipper skill to create a manifest for Clipper98.");
 
         var literal = source[assignment.Length..].Trim();
+        literal = Regex.Replace(literal, @"\s*```(?:python)?\s*\z", string.Empty, RegexOptions.IgnoreCase).TrimEnd();
         try
         {
-            using var document = JsonDocument.Parse(ConvertPythonLiterals(literal));
+            using var document = JsonDocument.Parse(NormalizePythonData(literal));
             var manifest = ParseManifest(document.RootElement);
             var clips = ValidateAndMap(manifest);
-            return (manifest, clips);
+            var warning = !manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase)
+                && manifest.ClipsData.Count < manifest.RequestedCandidateCount
+                ? $"Gemini mengirim {manifest.ClipsData.Count} dari {manifest.RequestedCandidateCount} kandidat yang diminta. Impor kandidat yang tersedia saja?"
+                : null;
+            return (manifest, clips, warning);
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException("CLIPPER_JOB is not valid plain Python data. Clipper does not execute imported files. Recreate the manifest with the current @clipper skill.", ex);
+            if (TryRecoverCompleteShortClips(literal, out var recoveredManifest, out var recoveredClips))
+            {
+                var warning = $"Gemini memotong file sebelum selesai. {recoveredClips.Count} kandidat lengkap berhasil dipulihkan; kandidat yang terpotong dilewati. Impor hanya kandidat lengkap ini?";
+                return (recoveredManifest, recoveredClips, warning);
+            }
+
+            if (ex.Message.Contains("closing quote", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("end of data", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("incomplete", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("File Gemini terpotong sebelum manifest selesai. Minta Gemini membuat ulang manifest yang lebih singkat; Clipper tidak bisa menebak teks yang hilang.", ex);
+            throw new InvalidOperationException($"Clipper could not parse the CLIPPER_JOB data ({ex.Message}). Use one data-only manifest assignment; Clipper never executes imported files.", ex);
         }
     }
 
@@ -194,7 +209,261 @@ public static class ClipperJobScript
         return clips;
     }
 
-    private static string ConvertPythonLiterals(string source) => ConvertTokens(source, jsonToPython: false);
+    private static string NormalizePythonData(string source)
+    {
+        var result = new System.Text.StringBuilder(source.Length + 16);
+        for (var i = 0; i < source.Length;)
+        {
+            var ch = source[i];
+            if (ch is '\'' or '"')
+            {
+                AppendPythonString(source, ref i, result);
+                continue;
+            }
+
+            if (ch == '#')
+            {
+                while (i < source.Length && source[i] is not '\r' and not '\n') i++;
+                continue;
+            }
+
+            if (ch == ',')
+            {
+                var next = i + 1;
+                while (next < source.Length)
+                {
+                    if (char.IsWhiteSpace(source[next])) { next++; continue; }
+                    if (source[next] == '#')
+                    {
+                        while (next < source.Length && source[next] is not '\r' and not '\n') next++;
+                        continue;
+                    }
+                    break;
+                }
+                if (next < source.Length && source[next] is '}' or ']')
+                {
+                    i++;
+                    continue;
+                }
+            }
+
+            var replaced = false;
+            foreach (var (from, to) in new (string From, string To)[]
+            {
+                ("True", "true"), ("False", "false"), ("None", "null")
+            })
+            {
+                if (i + from.Length > source.Length || !source.AsSpan(i, from.Length).SequenceEqual(from)) continue;
+                var beforeOk = i == 0 || !char.IsLetterOrDigit(source[i - 1]) && source[i - 1] != '_';
+                var afterIndex = i + from.Length;
+                var afterOk = afterIndex == source.Length || !char.IsLetterOrDigit(source[afterIndex]) && source[afterIndex] != '_';
+                if (!beforeOk || !afterOk) continue;
+                result.Append(to);
+                i = afterIndex;
+                replaced = true;
+                break;
+            }
+
+            if (replaced) continue;
+            result.Append(ch);
+            i++;
+        }
+
+        return result.ToString();
+    }
+
+    private static bool TryRecoverCompleteShortClips(string literal, out ClipperJobManifest manifest, out List<ClipCandidate> clips)
+    {
+        manifest = new ClipperJobManifest();
+        clips = [];
+        var property = Regex.Match(literal, "[\\\"']clips_data[\\\"']\\s*:\\s*\\[", RegexOptions.IgnoreCase);
+        if (!property.Success) return false;
+
+        var arrayStart = property.Index + property.Length - 1;
+        var completeItems = ExtractCompleteArrayObjects(literal, arrayStart + 1);
+        if (completeItems.Count == 0) return false;
+
+        var prefix = literal[..property.Index].TrimEnd().TrimEnd(',');
+        string jsonPrefix;
+        try
+        {
+            jsonPrefix = NormalizePythonData(prefix).TrimEnd();
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        if (!jsonPrefix.EndsWith('}')) return false;
+
+        var recoveredJson = jsonPrefix + ",\"clips_data\":[" + string.Join(',', completeItems) + "]}";
+        try
+        {
+            using var document = JsonDocument.Parse(recoveredJson);
+            manifest = ParseManifest(document.RootElement);
+            clips = ValidateAndMap(manifest);
+            return manifest.Mode.Equals("short_clips", StringComparison.OrdinalIgnoreCase) && clips.Count > 0;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        {
+            manifest = new ClipperJobManifest();
+            clips = [];
+            return false;
+        }
+    }
+
+    private static List<string> ExtractCompleteArrayObjects(string source, int index)
+    {
+        var items = new List<string>();
+        while (index < source.Length)
+        {
+            while (index < source.Length)
+            {
+                if (char.IsWhiteSpace(source[index]) || source[index] == ',') { index++; continue; }
+                if (source[index] == '#')
+                {
+                    while (index < source.Length && source[index] is not '\r' and not '\n') index++;
+                    continue;
+                }
+                break;
+            }
+
+            if (index >= source.Length || source[index] == ']') break;
+            if (source[index] != '{') break;
+
+            var start = index;
+            var objectDepth = 0;
+            var quote = '\0';
+            var tripleQuoted = false;
+            var escaped = false;
+            var complete = false;
+            for (; index < source.Length; index++)
+            {
+                var ch = source[index];
+                if (quote != '\0')
+                {
+                    if (escaped) { escaped = false; continue; }
+                    if (ch == '\\') { escaped = true; continue; }
+                    if (ch != quote) continue;
+                    if (tripleQuoted && index + 2 < source.Length && source[index + 1] == quote && source[index + 2] == quote)
+                    {
+                        index += 2;
+                        quote = '\0';
+                        tripleQuoted = false;
+                    }
+                    else if (!tripleQuoted)
+                    {
+                        quote = '\0';
+                    }
+                    continue;
+                }
+
+                if (ch == '#')
+                {
+                    while (index < source.Length && source[index] is not '\r' and not '\n') index++;
+                    continue;
+                }
+                if (ch is '\'' or '"')
+                {
+                    quote = ch;
+                    tripleQuoted = index + 2 < source.Length && source[index + 1] == ch && source[index + 2] == ch;
+                    if (tripleQuoted) index += 2;
+                    continue;
+                }
+                if (ch == '{') objectDepth++;
+                else if (ch == '}' && --objectDepth == 0)
+                {
+                    var rawItem = source[start..(index + 1)];
+                    try
+                    {
+                        var jsonItem = NormalizePythonData(rawItem);
+                        using var parsedItem = JsonDocument.Parse(jsonItem);
+                        if (parsedItem.RootElement.ValueKind != JsonValueKind.Object) break;
+                        items.Add(jsonItem);
+                        index++;
+                        complete = true;
+                    }
+                    catch (JsonException)
+                    {
+                        return items;
+                    }
+                    break;
+                }
+            }
+
+            if (!complete) break;
+        }
+        return items;
+    }
+
+    private static void AppendPythonString(string source, ref int index, System.Text.StringBuilder result)
+    {
+        var delimiter = source[index++];
+        var tripleQuoted = index + 1 < source.Length && source[index] == delimiter && source[index + 1] == delimiter;
+        if (tripleQuoted) index += 2;
+        result.Append('"');
+
+        while (index < source.Length)
+        {
+            var ch = source[index++];
+            if (ch == delimiter)
+            {
+                if (!tripleQuoted || index + 1 < source.Length && source[index] == delimiter && source[index + 1] == delimiter)
+                {
+                    if (tripleQuoted) index += 2;
+                    result.Append('"');
+                    return;
+                }
+            }
+
+            if (ch == '\\')
+            {
+                if (index >= source.Length) throw new JsonException("A string ends with an incomplete escape.");
+                var escaped = source[index++];
+                if (escaped is '\r' or '\n')
+                {
+                    if (escaped == '\r' && index < source.Length && source[index] == '\n') index++;
+                    continue;
+                }
+
+                switch (escaped)
+                {
+                    case '\\': result.Append("\\\\"); break;
+                    case '"': result.Append("\\\""); break;
+                    case '\'': result.Append('\''); break;
+                    case '/': result.Append('/'); break;
+                    case 'n': result.Append("\\n"); break;
+                    case 'r': result.Append("\\r"); break;
+                    case 't': result.Append("\\t"); break;
+                    case 'b': result.Append("\\b"); break;
+                    case 'f': result.Append("\\f"); break;
+                    case 'u':
+                        if (index + 4 > source.Length || !ushort.TryParse(source.AsSpan(index, 4), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out _))
+                            throw new JsonException("A string contains an invalid Unicode escape.");
+                        result.Append("\\u").Append(source.AsSpan(index, 4));
+                        index += 4;
+                        break;
+                    case 'x':
+                        if (index + 2 > source.Length || !byte.TryParse(source.AsSpan(index, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var hex))
+                            throw new JsonException("A string contains an invalid hexadecimal escape.");
+                        result.Append((char)hex);
+                        index += 2;
+                        break;
+                    default:
+                        result.Append("\\\\").Append(escaped);
+                        break;
+                }
+                continue;
+            }
+
+            if (ch == '"') result.Append("\\\"");
+            else if (ch is '\r' or '\n') result.Append("\\n");
+            else if (ch == '\t') result.Append("\\t");
+            else result.Append(ch);
+        }
+
+        throw new JsonException("A string is missing its closing quote.");
+    }
+
     private static string ConvertJsonLiterals(string source) => ConvertTokens(source, jsonToPython: true);
 
     private static string ConvertTokens(string source, bool jsonToPython)
