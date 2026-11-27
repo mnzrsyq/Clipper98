@@ -152,7 +152,7 @@ Set-Location Clipper98
 Untuk membangun installer, jalankan dari PowerShell di root repo. Ganti nilai versi dengan versi yang akan dirilis:
 
 ```powershell
-.\Release-Clipper98.bat -Version "1.1.0"
+.\Release-Clipper98.bat -Version "1.1.1"
 ```
 
 Build menghasilkan file di `artifacts\publish`; installer dibuat di `artifacts\installer`. Folder `tools` dan model tidak disertakan dalam paket rilis. Untuk alur publikasi GitHub, workflow `.github/workflows/release.yml` membuat installer dan GitHub Release saat tag `v*` didorong.
