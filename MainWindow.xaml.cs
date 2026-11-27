@@ -959,9 +959,20 @@ public partial class MainWindow : Window
         CommitUploadQueueMetadata();
         PersistUploadQueue();
         _selectedUploadItem = UploadScheduleGrid.SelectedItem as YouTubeUploadItem;
+        var selectedCount = UploadScheduleGrid.SelectedItems.Count;
         _loadingQueueMetadata = true;
-        QueueTitleBox.Text = _selectedUploadItem?.Title ?? string.Empty;
-        QueueDescriptionBox.Text = _selectedUploadItem?.Description ?? string.Empty;
+
+        if (selectedCount <= 1)
+        {
+            QueueTitleBox.Text = _selectedUploadItem?.Title ?? string.Empty;
+            QueueDescriptionBox.Text = _selectedUploadItem?.Description ?? string.Empty;
+        }
+        else
+        {
+            QueueTitleBox.Text = $"[{selectedCount} videos selected]";
+            QueueDescriptionBox.Text = string.Empty;
+        }
+
         if (_selectedUploadItem?.PublishAt is { } scheduled)
         {
             var local = TimeZoneInfo.ConvertTime(scheduled, GetWibTimeZone());
@@ -973,15 +984,20 @@ public partial class MainWindow : Window
             PublishDatePicker.SelectedDate = GetWibNow().Date;
             PublishTimeBox.Text = "19:30";
         }
-        var canEdit = _youtubeCts is null
-            && _selectedUploadItem is not null
-            && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
-        QueueTitleBox.IsEnabled = canEdit;
-        QueueDescriptionBox.IsEnabled = canEdit;
-        PublishDatePicker.IsEnabled = canEdit;
-        PublishTimeBox.IsEnabled = canEdit;
+
+        var isBusy = _youtubeCts is not null;
+        var hasEditableItem = !isBusy && UploadScheduleGrid.SelectedItems.Cast<YouTubeUploadItem>()
+            .Any(item => string.IsNullOrWhiteSpace(item.YouTubeVideoId));
+
+        QueueTitleBox.IsEnabled = !isBusy && selectedCount == 1 && _selectedUploadItem is not null && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        QueueDescriptionBox.IsEnabled = !isBusy && selectedCount == 1 && _selectedUploadItem is not null && string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId);
+        PublishDatePicker.IsEnabled = hasEditableItem;
+        PublishTimeBox.IsEnabled = hasEditableItem;
+        SetPublishTimeButton.IsEnabled = hasEditableItem;
+        ClearPublishTimeButton.IsEnabled = hasEditableItem;
+
         _loadingQueueMetadata = false;
-        RemoveUploadQueueItemButton.IsEnabled = UploadScheduleGrid.SelectedItems.Count > 0 && _youtubeCts is null;
+        RemoveUploadQueueItemButton.IsEnabled = selectedCount > 0 && !isBusy;
         UpdateQueueActionButtons();
     }
 
@@ -1273,7 +1289,7 @@ public partial class MainWindow : Window
 
     private void CommitUploadQueueMetadata()
     {
-        if (_selectedUploadItem is null || _loadingQueueMetadata) return;
+        if (_selectedUploadItem is null || _loadingQueueMetadata || UploadScheduleGrid.SelectedItems.Count > 1) return;
         _selectedUploadItem.Title = QueueTitleBox.Text.Trim();
         _selectedUploadItem.Description = QueueDescriptionBox.Text.Trim();
     }
@@ -1287,14 +1303,21 @@ public partial class MainWindow : Window
     private void AutoScheduleButton_Click(object sender, RoutedEventArgs e)
     {
         CommitUploadQueueMetadata();
-        var selected = _uploadItems.Where(item => item.IsSelected).ToList();
-        if (selected.Count == 0)
+
+        // Gunakan baris yang sedang aktif/di-block di tabel jika ada
+        var activeTargets = UploadScheduleGrid.SelectedItems.Cast<YouTubeUploadItem>().ToList();
+        List<YouTubeUploadItem> targetList;
+        if (activeTargets.Count > 0)
         {
-            SetStatus("STATUS: Select the videos you want to schedule.", true);
-            return;
+            targetList = activeTargets;
+        }
+        else
+        {
+            var checkedItems = _uploadItems.Where(item => item.IsSelected).ToList();
+            targetList = checkedItems.Count > 0 ? checkedItems : _uploadItems.ToList();
         }
 
-        var waiting = selected.Where(item => item.PublishAt is null
+        var waiting = targetList.Where(item => item.PublishAt is null
             && string.IsNullOrWhiteSpace(item.YouTubeVideoId)
             && File.Exists(item.FilePath)).ToList();
         if (waiting.Count == 0)
@@ -1327,23 +1350,18 @@ public partial class MainWindow : Window
 
         if (priorBenchmark is not null && priorBenchmark.PublishAt.HasValue)
         {
-            // Kondisi 3 (atau Kondisi 2 bila item sebelumnya merupakan video terupload):
-            // Video urutan pertama (atau sebelum video antrean) sudah memiliki jadwal publikasi.
             cursor = priorBenchmark.PublishAt.Value;
         }
         else if (lastUploadedItem is not null && lastUploadedItem.PublishAt.HasValue)
         {
-            // Kondisi 2: Antrean pertama belum terisi, tetapi pernah upload video ke YouTube sebelumnya
             cursor = lastUploadedItem.PublishAt.Value;
         }
         else if (_settings.LastUploadedPublishAt.HasValue)
         {
-            // Kondisi 2 fallback riwayat dari settings
             cursor = _settings.LastUploadedPublishAt.Value;
         }
         else
         {
-            // Kondisi 1: Antrean pertama kosong dan belum pernah upload sebelumnya
             WpfMessageBox.Show(this,
                 "Video urutan pertama belum memiliki waktu publikasi (Publication Time) dan belum ada riwayat video yang pernah di-upload ke YouTube.\n\n" +
                 "Silakan atur waktu publikasi minimal untuk 1 video terlebih dahulu sebagai patokan hari dan slot untuk video selanjutnya.",
@@ -1381,21 +1399,23 @@ public partial class MainWindow : Window
     private void SetPublishTime_Click(object sender, RoutedEventArgs e)
     {
         CommitUploadQueueMetadata();
-        if (_selectedUploadItem is null || !_selectedUploadItem.IsSelected)
+        var targets = UploadScheduleGrid.SelectedItems.Cast<YouTubeUploadItem>().ToList();
+        if (targets.Count == 0 && _selectedUploadItem is not null)
+            targets.Add(_selectedUploadItem);
+
+        if (targets.Count == 0)
         {
-            SetStatus("STATUS: Select and check one video before setting its publish time.", true);
+            SetStatus("STATUS: Select at least one video in the queue to set its publish time.", true);
             return;
         }
-        if (!string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId))
+
+        var eligible = targets.Where(item => string.IsNullOrWhiteSpace(item.YouTubeVideoId) && File.Exists(item.FilePath)).ToList();
+        if (eligible.Count == 0)
         {
-            SetStatus("STATUS: This video is already scheduled on YouTube. Change its publish time in YouTube Studio.", true);
+            SetStatus("STATUS: Selected videos are already on YouTube or local files are missing.", true);
             return;
         }
-        if (!File.Exists(_selectedUploadItem.FilePath))
-        {
-            SetStatus("STATUS: The local video file could not be found.", true);
-            return;
-        }
+
         if (PublishDatePicker.SelectedDate is not { } date
             || !TimeOnly.TryParse(PublishTimeBox.Text, CultureInfo.InvariantCulture, out var time))
         {
@@ -1411,37 +1431,100 @@ public partial class MainWindow : Window
             SetStatus("STATUS: The publish time must be in the future.", true);
             return;
         }
-        if (_uploadItems.Any(item => !ReferenceEquals(item, _selectedUploadItem)
-            && item.PublishAt is { } existing && existing == scheduled))
-        {
-            SetStatus("STATUS: Another video in this local queue already uses that time.", true);
-            return;
-        }
 
-        _selectedUploadItem.PublishAt = scheduled;
-        PersistUploadQueue();
-        UploadScheduleGrid.Items.Refresh();
-        UpdateUploadQueueSummary();
-        SetStatus($"STATUS: Publish time saved for {scheduled:MMM d, yyyy h:mm tt} WIB.");
+        if (eligible.Count == 1)
+        {
+            if (_uploadItems.Any(item => !ReferenceEquals(item, eligible[0])
+                && item.PublishAt is { } existing && existing == scheduled))
+            {
+                SetStatus("STATUS: Another video in this local queue already uses that time.", true);
+                return;
+            }
+
+            eligible[0].PublishAt = scheduled;
+            PersistUploadQueue();
+            UploadScheduleGrid.Items.Refresh();
+            UpdateUploadQueueSummary();
+            SetStatus($"STATUS: Publish time saved for {scheduled:MMM d, yyyy h:mm tt} WIB.");
+            WriteLog($"Publish time set for {eligible[0].FileName}: {scheduled:yyyy-MM-dd HH:mm} WIB.");
+        }
+        else
+        {
+            var occupied = _uploadItems
+                .Where(item => item.PublishAt.HasValue && !eligible.Contains(item))
+                .Select(item => item.PublishAt!.Value)
+                .ToHashSet();
+
+            DateTimeOffset cursor;
+            if (!occupied.Contains(scheduled))
+            {
+                eligible[0].PublishAt = scheduled;
+                occupied.Add(scheduled);
+                cursor = scheduled;
+            }
+            else
+            {
+                var firstSlot = FindNextScheduleSlot(scheduled, occupied);
+                eligible[0].PublishAt = firstSlot;
+                occupied.Add(firstSlot);
+                cursor = firstSlot;
+            }
+
+            for (var i = 1; i < eligible.Count; i++)
+            {
+                var slot = FindNextScheduleSlot(cursor, occupied);
+                eligible[i].PublishAt = slot;
+                occupied.Add(slot);
+                cursor = slot;
+            }
+
+            PersistUploadQueue();
+            UploadScheduleGrid.Items.Refresh();
+            UpdateUploadQueueSummary();
+            SetStatus($"STATUS: Assigned publish times to {eligible.Count} videos starting from {eligible[0].PublishAtDisplay}.");
+            WriteLog($"Batch publish times set for {eligible.Count} videos starting from {eligible[0].PublishAtDisplay}.");
+        }
     }
 
     private void ClearPublishTime_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedUploadItem is null)
+        var targets = UploadScheduleGrid.SelectedItems.Cast<YouTubeUploadItem>().ToList();
+        if (targets.Count == 0 && _selectedUploadItem is not null)
+            targets.Add(_selectedUploadItem);
+
+        if (targets.Count == 0)
         {
-            SetStatus("STATUS: Select a video to clear its publish time.", true);
+            SetStatus("STATUS: Select one or more videos to clear publish time.", true);
             return;
         }
-        if (!string.IsNullOrWhiteSpace(_selectedUploadItem.YouTubeVideoId))
+
+        var clearedCount = 0;
+        var onYouTubeCount = 0;
+        foreach (var item in targets)
         {
-            SetStatus("STATUS: This video is already scheduled on YouTube. Change its publish time in YouTube Studio.", true);
+            if (!string.IsNullOrWhiteSpace(item.YouTubeVideoId))
+            {
+                onYouTubeCount++;
+                continue;
+            }
+            if (item.PublishAt.HasValue)
+            {
+                item.PublishAt = null;
+                clearedCount++;
+            }
+        }
+
+        if (clearedCount == 0 && onYouTubeCount > 0)
+        {
+            SetStatus("STATUS: Selected videos are already scheduled on YouTube. Change their publish time in YouTube Studio.", true);
             return;
         }
-        _selectedUploadItem.PublishAt = null;
+
         PersistUploadQueue();
         UploadScheduleGrid.Items.Refresh();
         UpdateUploadQueueSummary();
-        SetStatus("STATUS: Publish time cleared from the local queue.");
+        SetStatus($"STATUS: Cleared publish time for {clearedCount} video{(clearedCount == 1 ? "" : "s")}.");
+        WriteLog($"Cleared publish time for {clearedCount} video{(clearedCount == 1 ? "" : "s")} from the local queue.");
     }
 
     private void RemoveUploadQueueItem_Click(object sender, RoutedEventArgs e)
