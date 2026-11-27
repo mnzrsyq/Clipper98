@@ -55,6 +55,7 @@ public partial class MainWindow : Window
         PublishDatePicker.SelectedDate = GetWibNow().Date;
         if (_uploadItems.Count > 0) UploadScheduleGrid.SelectedIndex = 0;
         UpdateUploadQueueSummary();
+        UpdatePublishSlotsSummary();
         FontBox.ItemsSource = SubtitleFonts.LoadOptions();
         FontBox.SelectedItem = FontBox.Items.OfType<SubtitleFontOption>()
             .FirstOrDefault(option => option.FamilyName.Equals("Segoe UI", StringComparison.OrdinalIgnoreCase))
@@ -1191,6 +1192,8 @@ public partial class MainWindow : Window
                     item.YouTubeVideoId = uploaded.Id ?? string.Empty;
                     item.UploadStatus = "Scheduled on YouTube";
                     item.IsSelected = false;
+                    _settings.LastUploadedPublishAt = item.PublishAt;
+                    _settings.LastUploadedVideoId = uploaded.Id ?? string.Empty;
                     WriteLog($"Scheduled on YouTube: {item.FileName} (https://youtu.be/{uploaded.Id})");
                 }
                 catch (OperationCanceledException) when (_youtubeCts.IsCancellationRequested)
@@ -1284,22 +1287,74 @@ public partial class MainWindow : Window
     private void AutoScheduleButton_Click(object sender, RoutedEventArgs e)
     {
         CommitUploadQueueMetadata();
-        var waiting = _uploadItems.Where(item => item.IsSelected
-            && item.PublishAt is null
+        var selected = _uploadItems.Where(item => item.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            SetStatus("STATUS: Select the videos you want to schedule.", true);
+            return;
+        }
+
+        var waiting = selected.Where(item => item.PublishAt is null
             && string.IsNullOrWhiteSpace(item.YouTubeVideoId)
             && File.Exists(item.FilePath)).ToList();
         if (waiting.Count == 0)
         {
-            var selectedCount = _uploadItems.Count(item => item.IsSelected);
-            SetStatus(selectedCount == 0
-                ? "STATUS: Select the videos you want to schedule."
-                : "STATUS: Selected videos already have publish times, are on YouTube, or have missing files.", selectedCount == 0);
+            SetStatus("STATUS: Selected videos already have publish times, are on YouTube, or have missing files.", true);
+            return;
+        }
+
+        var firstWaiting = waiting[0];
+        var firstWaitingIndex = _uploadItems.IndexOf(firstWaiting);
+
+        // Cari item sebelumnya di antrean yang sudah memiliki PublishAt
+        YouTubeUploadItem? priorBenchmark = null;
+        for (var i = firstWaitingIndex - 1; i >= 0; i--)
+        {
+            if (_uploadItems[i].PublishAt.HasValue)
+            {
+                priorBenchmark = _uploadItems[i];
+                break;
+            }
+        }
+
+        // Cari video yang pernah berhasil terupload ke YouTube
+        var lastUploadedItem = _uploadItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.YouTubeVideoId) && item.PublishAt.HasValue)
+            .OrderByDescending(item => item.PublishAt!.Value)
+            .FirstOrDefault();
+
+        DateTimeOffset cursor;
+
+        if (priorBenchmark is not null && priorBenchmark.PublishAt.HasValue)
+        {
+            // Kondisi 3 (atau Kondisi 2 bila item sebelumnya merupakan video terupload):
+            // Video urutan pertama (atau sebelum video antrean) sudah memiliki jadwal publikasi.
+            cursor = priorBenchmark.PublishAt.Value;
+        }
+        else if (lastUploadedItem is not null && lastUploadedItem.PublishAt.HasValue)
+        {
+            // Kondisi 2: Antrean pertama belum terisi, tetapi pernah upload video ke YouTube sebelumnya
+            cursor = lastUploadedItem.PublishAt.Value;
+        }
+        else if (_settings.LastUploadedPublishAt.HasValue)
+        {
+            // Kondisi 2 fallback riwayat dari settings
+            cursor = _settings.LastUploadedPublishAt.Value;
+        }
+        else
+        {
+            // Kondisi 1: Antrean pertama kosong dan belum pernah upload sebelumnya
+            WpfMessageBox.Show(this,
+                "Video urutan pertama belum memiliki waktu publikasi (Publication Time) dan belum ada riwayat video yang pernah di-upload ke YouTube.\n\n" +
+                "Silakan atur waktu publikasi minimal untuk 1 video terlebih dahulu sebagai patokan hari dan slot untuk video selanjutnya.",
+                "Auto-Schedule", MessageBoxButton.OK, MessageBoxImage.Information);
+            SetStatus("STATUS: Atur waktu publikasi minimal 1 video terlebih dahulu sebagai patokan.", true);
             return;
         }
 
         var occupied = _uploadItems.Where(item => item.PublishAt.HasValue)
             .Select(item => item.PublishAt!.Value).ToHashSet();
-        var cursor = GetWibNow();
+
         try
         {
             foreach (var item in waiting)
@@ -1492,38 +1547,176 @@ public partial class MainWindow : Window
         catch (InvalidTimeZoneException) { return TimeZoneInfo.Local; }
     }
 
-    private static DateTimeOffset FindNextScheduleSlot(DateTimeOffset after, HashSet<DateTimeOffset> occupied)
+    private DateTimeOffset FindNextScheduleSlot(DateTimeOffset after, HashSet<DateTimeOffset> occupied) =>
+        FindNextScheduleSlot(after, occupied, GetWeekdayPublishSlots(), GetWeekendPublishSlots());
+
+    private static DateTimeOffset FindNextScheduleSlot(
+        DateTimeOffset after,
+        HashSet<DateTimeOffset> occupied,
+        IReadOnlyList<TimeOnly> weekdaySlots,
+        IReadOnlyList<TimeOnly> weekendSlots)
     {
         var zone = GetWibTimeZone();
-        var localStart = TimeZoneInfo.ConvertTime(after, zone).Date;
+        var now = GetWibNow();
+        var minTime = after > now ? after : now;
+        var localStart = TimeZoneInfo.ConvertTime(minTime, zone).Date;
         for (var dayOffset = 0; dayOffset < 366; dayOffset++)
         {
             var date = localStart.AddDays(dayOffset);
             var slots = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
-                ? WeekendPublishSlots
-                : WeekdayPublishSlots;
+                ? weekendSlots
+                : weekdaySlots;
             foreach (var slot in slots)
             {
                 var wallClock = DateTime.SpecifyKind(date.Add(slot.ToTimeSpan()), DateTimeKind.Unspecified);
                 var candidate = new DateTimeOffset(wallClock, zone.GetUtcOffset(wallClock));
-                if (candidate <= after || occupied.Contains(candidate)) continue;
+                if (candidate <= after || candidate <= now || occupied.Contains(candidate)) continue;
                 return candidate;
             }
         }
         throw new InvalidOperationException("Tidak ditemukan slot publikasi kosong untuk 12 bulan ke depan.");
     }
 
-    private static readonly TimeOnly[] WeekdayPublishSlots =
+    private static readonly TimeOnly[] DefaultWeekdayPublishSlots =
     [
         new(6, 30), new(9, 30), new(11, 45), new(13, 30),
         new(16, 0), new(18, 0), new(19, 30), new(21, 15)
     ];
 
-    private static readonly TimeOnly[] WeekendPublishSlots =
+    private static readonly TimeOnly[] DefaultWeekendPublishSlots =
     [
         new(8, 0), new(10, 0), new(12, 0), new(14, 0),
         new(16, 0), new(18, 15), new(20, 0), new(22, 0)
     ];
+
+    private IReadOnlyList<TimeOnly> GetWeekdayPublishSlots()
+    {
+        if (_settings.CustomWeekdaySlots is { Count: > 0 } custom)
+        {
+            var parsed = ParseSlotList(custom);
+            if (parsed.Count > 0) return parsed;
+        }
+        return DefaultWeekdayPublishSlots;
+    }
+
+    private IReadOnlyList<TimeOnly> GetWeekendPublishSlots()
+    {
+        if (_settings.CustomWeekendSlots is { Count: > 0 } custom)
+        {
+            var parsed = ParseSlotList(custom);
+            if (parsed.Count > 0) return parsed;
+        }
+        return DefaultWeekendPublishSlots;
+    }
+
+    private static List<TimeOnly> ParseSlotList(IEnumerable<string> slots)
+    {
+        var result = new List<TimeOnly>();
+        foreach (var s in slots)
+        {
+            if (TimeOnly.TryParse(s.Trim(), CultureInfo.InvariantCulture, out var t))
+                result.Add(t);
+        }
+        return result.Distinct().OrderBy(t => t).ToList();
+    }
+
+    private static List<TimeOnly> ParseSlotInputString(string input, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            error = "Slot waktu tidak boleh kosong.";
+            return [];
+        }
+
+        var parts = input.Split([',', ';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            error = "Masukkan minimal 1 slot waktu.";
+            return [];
+        }
+
+        var parsed = new List<TimeOnly>();
+        foreach (var p in parts)
+        {
+            if (!TimeOnly.TryParse(p, CultureInfo.InvariantCulture, out var time))
+            {
+                error = $"Format waktu tidak valid: '{p}'. Gunakan format 24 jam seperti 06:30 atau 19:30.";
+                return [];
+            }
+            parsed.Add(time);
+        }
+
+        return parsed.Distinct().OrderBy(t => t).ToList();
+    }
+
+    private static string FormatSlotsForDisplay(string prefix, IReadOnlyList<TimeOnly> slots)
+    {
+        var times = slots.Select(s =>
+        {
+            var dt = DateTime.Today.Add(s.ToTimeSpan());
+            return dt.ToString("h:mm tt", CultureInfo.InvariantCulture);
+        });
+        return $"{prefix}  {string.Join(" · ", times)}";
+    }
+
+    private void UpdatePublishSlotsSummary()
+    {
+        if (WeekdaySlotsSummaryText is not null)
+            WeekdaySlotsSummaryText.Text = FormatSlotsForDisplay("Weekdays", GetWeekdayPublishSlots());
+        if (WeekendSlotsSummaryText is not null)
+            WeekendSlotsSummaryText.Text = FormatSlotsForDisplay("Weekends", GetWeekendPublishSlots());
+    }
+
+    private void CustomizeSlots_Click(object sender, RoutedEventArgs e)
+    {
+        WeekdaySlotsBox.Text = string.Join(", ", GetWeekdayPublishSlots().Select(t => t.ToString("HH:mm")));
+        WeekendSlotsBox.Text = string.Join(", ", GetWeekendPublishSlots().Select(t => t.ToString("HH:mm")));
+        CustomSlotsPanel.Visibility = Visibility.Visible;
+    }
+
+    private void CloseSlotsPanel_Click(object sender, RoutedEventArgs e)
+    {
+        CustomSlotsPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void SaveSlots_Click(object sender, RoutedEventArgs e)
+    {
+        var weekdayParsed = ParseSlotInputString(WeekdaySlotsBox.Text, out var weekdayError);
+        if (weekdayError is not null)
+        {
+            SetStatus($"STATUS: Weekdays: {weekdayError}", true);
+            return;
+        }
+
+        var weekendParsed = ParseSlotInputString(WeekendSlotsBox.Text, out var weekendError);
+        if (weekendError is not null)
+        {
+            SetStatus($"STATUS: Weekends: {weekendError}", true);
+            return;
+        }
+
+        _settings.CustomWeekdaySlots = weekdayParsed.Select(t => t.ToString("HH:mm")).ToList();
+        _settings.CustomWeekendSlots = weekendParsed.Select(t => t.ToString("HH:mm")).ToList();
+        SettingsStore.Save(_settings);
+
+        UpdatePublishSlotsSummary();
+        CustomSlotsPanel.Visibility = Visibility.Collapsed;
+        SetStatus($"STATUS: Slot publikasi berhasil disimpan ({weekdayParsed.Count} slot weekday, {weekendParsed.Count} slot weekend).");
+        WriteLog($"Custom publish slots updated: {weekdayParsed.Count} weekdays, {weekendParsed.Count} weekends.");
+    }
+
+    private void ResetDefaultSlots_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.CustomWeekdaySlots.Clear();
+        _settings.CustomWeekendSlots.Clear();
+        SettingsStore.Save(_settings);
+
+        WeekdaySlotsBox.Text = string.Join(", ", DefaultWeekdayPublishSlots.Select(t => t.ToString("HH:mm")));
+        WeekendSlotsBox.Text = string.Join(", ", DefaultWeekendPublishSlots.Select(t => t.ToString("HH:mm")));
+        UpdatePublishSlotsSummary();
+        SetStatus("STATUS: Slot publikasi dikembalikan ke default bawaan.");
+    }
 
     private void SetupButton_Click(object sender, RoutedEventArgs e)
     {

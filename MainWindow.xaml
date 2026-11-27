@@ -318,19 +318,55 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
-          <Border Grid.Row="0" Background="{DynamicResource FaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="8" Margin="0,0,0,8">
-            <Grid>
-              <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <StackPanel Grid.Row="0" Margin="0,0,0,8">
+            <Border Background="{DynamicResource FaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="8">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <StackPanel>
+                  <TextBlock Text="WIB publishing slots" FontWeight="Bold" />
+                  <TextBlock x:Name="WeekdaySlotsSummaryText" Text="Weekdays  6:30 AM · 9:30 AM · 11:45 AM · 1:30 PM · 4:00 PM · 6:00 PM · 7:30 PM · 9:15 PM" TextWrapping="Wrap" Margin="0,3,0,0" />
+                  <TextBlock x:Name="WeekendSlotsSummaryText" Text="Weekends  8:00 AM · 10:00 AM · 12:00 PM · 2:00 PM · 4:00 PM · 6:15 PM · 8:00 PM · 10:00 PM" TextWrapping="Wrap" Margin="0,2,0,0" />
+                  <TextBlock Text="Auto-Schedule fills the next available slot. Clipper uploads each video as Private and sends its publish time to YouTube." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
+                  <TextBlock x:Name="YouTubeConnectionStatusText" Text="Not connected. Connect a YouTube channel to upload scheduled videos." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <Button x:Name="YouTubeConnectionButton" Content="CONNECT YOUTUBE" MinWidth="150" Height="30" Click="YouTubeConnection_Click" />
+                  <Button x:Name="CustomizeSlotsButton" Content="CUSTOMIZE SLOTS" MinWidth="150" Height="26" Margin="0,6,0,0" Click="CustomizeSlots_Click" ToolTip="Ubah jumlah slot dan jam publikasi harian" />
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <Border x:Name="CustomSlotsPanel" Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="9" Margin="0,6,0,0" Visibility="Collapsed">
               <StackPanel>
-                <TextBlock Text="WIB publishing slots" FontWeight="Bold" />
-                <TextBlock Text="Weekdays  6:30 AM · 9:30 AM · 11:45 AM · 1:30 PM · 4:00 PM · 6:00 PM · 7:30 PM · 9:15 PM" TextWrapping="Wrap" Margin="0,3,0,0" />
-                <TextBlock Text="Weekends  8:00 AM · 10:00 AM · 12:00 PM · 2:00 PM · 4:00 PM · 6:15 PM · 8:00 PM · 10:00 PM" TextWrapping="Wrap" Margin="0,2,0,0" />
-                <TextBlock Text="Auto-Schedule fills the next available slot. Clipper uploads each video as Private and sends its publish time to YouTube." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
-                <TextBlock x:Name="YouTubeConnectionStatusText" Text="Not connected. Connect a YouTube channel to upload scheduled videos." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
+                <DockPanel Margin="0,0,0,6">
+                  <TextBlock Text="CUSTOM PUBLISHING SLOTS (WIB)" FontWeight="Bold" VerticalAlignment="Center" />
+                  <Button x:Name="CloseSlotsPanelButton" DockPanel.Dock="Right" Content="✕" Width="24" Height="22" Padding="0" Click="CloseSlotsPanel_Click" ToolTip="Close editor" />
+                </DockPanel>
+                <TextBlock Text="Atur jumlah slot dan jam publikasi harian. Pisahkan jam dengan koma (format 24 jam HH:mm, contoh: 06:30, 09:30, 13:30, 19:30)." Foreground="{DynamicResource MutedTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <Grid Margin="0,2,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Weekdays:" FontWeight="Bold" VerticalAlignment="Center" />
+                  <TextBox x:Name="WeekdaySlotsBox" Grid.Column="1" Padding="4,2" />
+                </Grid>
+                <Grid Margin="0,4,0,8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Weekends:" FontWeight="Bold" VerticalAlignment="Center" />
+                  <TextBox x:Name="WeekendSlotsBox" Grid.Column="1" Padding="4,2" />
+                </Grid>
+                <DockPanel LastChildFill="False">
+                  <Button x:Name="SaveSlotsButton" Content="SAVE SLOTS" Padding="12,3" Margin="0,0,8,0" Click="SaveSlots_Click" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}" FontWeight="Bold" />
+                  <Button x:Name="ResetDefaultSlotsButton" Content="RESET TO DEFAULT" Padding="10,3" Margin="0,0,8,0" Click="ResetDefaultSlots_Click" />
+                  <Button x:Name="CancelSlotsButton" Content="CANCEL" Padding="10,3" Click="CloseSlotsPanel_Click" />
+                </DockPanel>
               </StackPanel>
-              <Button x:Name="YouTubeConnectionButton" Grid.Column="1" Content="CONNECT YOUTUBE" MinWidth="150" Height="32" VerticalAlignment="Center" Click="YouTubeConnection_Click" />
-            </Grid>
-          </Border>
+            </Border>
+          </StackPanel>
           <Grid Grid.Row="1">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,5">

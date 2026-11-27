@@ -163,6 +163,10 @@ public sealed class AppSettings
     public bool NightMode { get; set; }
     public string YouTubeClientSecretsJson { get; set; } = string.Empty;
     public List<YouTubeUploadItem> YouTubeUploadQueue { get; set; } = [];
+    public DateTimeOffset? LastUploadedPublishAt { get; set; }
+    public string LastUploadedVideoId { get; set; } = string.Empty;
+    public List<string> CustomWeekdaySlots { get; set; } = [];
+    public List<string> CustomWeekendSlots { get; set; } = [];
 }
 
 public sealed class YouTubeUploadItem : INotifyPropertyChanged
