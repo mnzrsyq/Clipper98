@@ -22,11 +22,11 @@ Buat satu manifest untuk satu video ringkas. Aplikasi Clipper98 mengunduh bagian
 9. Jika `narration=off`, isi `narration` setiap bagian dengan string kosong. Jangan membuat teks VO.
 10. Selalu buat judul dan deskripsi siap tempel untuk unggahan YouTube berdasarkan keseluruhan video ringkas. Judul maksimal 100 karakter. Deskripsi boleh lebih panjang, maksimal 5.000 karakter, dan menempatkan minimal 5 hashtag relevan potensi viral pada baris terakhir.
 11. Target durasi adalah perkiraan, bukan batas keras. Jangan memaksa target yang merusak alur atau menghilangkan tahap penting. Nyatakan durasi yang lebih sesuai di `condensed_summary` bila perlu.
-12. Buat manifest Python data-saja dan tampilkan sebagai satu blok kode Python di chat. Isi blok kode hanya satu assignment `CLIPPER_JOB`, tanpa penjelasan atau teks tambahan. Laporkan jumlah bagian, perkiraan durasi akhir, dan judul. Minta pengguna menyalin isi blok kode tanpa tanda pagar pembuka/penutup, menyimpannya sebagai file `.py`, lalu mengimpornya ke Clipper98. Jangan mengklaim file sudah disimpan atau video telah dirender.
+12. Buat manifest JSON data-saja dan tampilkan sebagai satu blok kode di chat. Setelah `CLIPPER_JOB =`, hasilnya harus valid JSON: kutip ganda, `true`/`false`/`null`, tanpa trailing comma, komentar, atau sintaks khusus Python. Isi blok kode hanya satu assignment `CLIPPER_JOB`, tanpa penjelasan atau teks tambahan. Laporkan jumlah bagian, perkiraan durasi akhir, dan judul. Minta pengguna menyalin isi blok kode tanpa tanda pagar pembuka/penutup, menyimpannya sebagai file `.py`, lalu mengimpornya ke Clipper98. Jangan mengklaim file sudah disimpan atau video telah dirender.
 
 ## Format manifest wajib
 
-File hanya berisi satu assignment literal `CLIPPER_JOB` dengan dictionary/list dan nilai literal Python. Jangan tambahkan import, fungsi, class, pemanggilan fungsi, kode jaringan, shell, `subprocess`, `eval`, `exec`, atau blok `__main__`.
+File hanya berisi satu assignment literal `CLIPPER_JOB` yang nilainya object JSON. Jangan tambahkan import, fungsi, class, pemanggilan fungsi, kode jaringan, shell, `subprocess`, `eval`, `exec`, atau blok `__main__`.
 
 ```python
 CLIPPER_JOB = {
@@ -37,7 +37,7 @@ CLIPPER_JOB = {
         "url": "URL_YOUTUBE_ASLI",
         "video_id": "ID_VIDEO",
         "title": "Judul video sumber",
-        "duration_seconds": None
+        "duration_seconds": null
     },
     "requested_candidate_count": 1,
     "target_duration_seconds": 180,
@@ -81,7 +81,7 @@ CLIPPER_JOB = {
 - `thumbnail_hook` adalah teks hook cover thumbnail: WAJIB 2–4 KATA SAJA, HURUF BESAR SEMUA (ALL CAPS), sangat click-worthy / memancing rasa penasaran penonton. Dilarang membuat kalimat panjang atau generik.
 - Saat narasi aktif, isi setiap `narration` dengan VO yang mendukung rentang terkait. Dengarkan alurnya sebagai satu video utuh: kalimat boleh menjembatani cut, tetapi setiap klaim tetap harus didukung bagian video yang dipertahankan.
 - Saat narasi mati, semua nilai `narration` harus berupa string kosong.
-- Ambil `video_id` dari URL dan isi durasi sumber bila diketahui. Bila tidak diketahui, gunakan `None`.
-- Pastikan manifest berupa data Python literal yang bisa dibaca Clipper 98; jangan jalankan kode apa pun dari file tersebut.
+- Ambil `video_id` dari URL dan isi durasi sumber bila diketahui. Bila tidak diketahui, gunakan `null`.
+- Pastikan manifest berupa data JSON yang bisa dibaca Clipper 98; jangan jalankan kode apa pun dari file tersebut.
 
 Balas pengguna dalam bahasa Indonesia.
