@@ -303,31 +303,6 @@ public static class ThumbnailComposer
         return outputOpeningMp4;
     }
 
-    public static async Task ExtractThumbnailFromMotionAsync(
-        string motionVideoPath,
-        string outputJpgPath,
-        string workDir,
-        double extractTimeSeconds,
-        CancellationToken ct)
-    {
-        var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
-        // Ekstrak pada puncak animasi pop-in (default 1.0s)
-        var targetTime = Math.Max(0.5, extractTimeSeconds);
-        var args = new List<string>
-        {
-            "-y",
-            "-ss", targetTime.ToString("0.###", Inv),
-            "-i", motionVideoPath,
-            "-frames:v", "1",
-            "-q:v", "2",
-            outputJpgPath
-        };
-
-        var res = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
-        if (res.ExitCode != 0 || !File.Exists(outputJpgPath))
-            throw new InvalidOperationException("Gagal mengekstrak thumbnail dari hasil Video Motion Composite. " + res.Tail());
-    }
-
     public static async Task PrependOpeningToVideoAsync(
         string openingMp4,
         string mainVideoMp4,

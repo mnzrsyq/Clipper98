@@ -209,6 +209,11 @@ public sealed class ClipPipeline
 
         try
         {
+            progress.Report(JobProgress.Stage("Membuat cover thumbnail 9:16 dari hero frame video..."));
+            await ThumbnailComposer.GenerateStaticThumbnailAsync(
+                source, relativeHero, hookText, thumbnailPath, job, cropExpression,
+                clip.PreserveFullFrame, thumbnailStyle, ct);
+
             if (clip.EnableOpeningMotion && thumbnailStyle.HookEnabled && !preserveSourceAspectRatio)
             {
                 progress.Report(JobProgress.Stage($"Rendering Opening Video Motion Composite ({openingDuration:0.#}s)..."));
@@ -216,9 +221,6 @@ public sealed class ClipPipeline
                 await ThumbnailComposer.RenderOpeningMotionCompositeAsync(
                     source, relativeHero, hookText, openingMp4, job, cropExpression,
                     clip.PreserveFullFrame, thumbnailStyle, openingDuration, ct);
-
-                progress.Report(JobProgress.Stage("Mengekstrak cover thumbnail statis dari puncak animasi Video Motion Composite..."));
-                await ThumbnailComposer.ExtractThumbnailFromMotionAsync(openingMp4, thumbnailPath, job, Math.Min(openingDuration * 0.6, 1.2), ct);
 
                 var mainRenderedMp4 = Path.Combine(job, "main_rendered.mp4");
                 await _renderer.RenderAsync(source, assFile, mainRenderedMp4, job, cropExpression, clip.PreserveFullFrame,
@@ -234,11 +236,6 @@ public sealed class ClipPipeline
                 await _renderer.RenderAsync(source, assFile, output, job, cropExpression, clip.PreserveFullFrame,
                     fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
                     useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription);
-
-                progress.Report(JobProgress.Stage("Membuat cover thumbnail 9:16 statis dengan teks hook..."));
-                await ThumbnailComposer.GenerateStaticThumbnailAsync(
-                    source, relativeHero, hookText, thumbnailPath, job, cropExpression,
-                    clip.PreserveFullFrame, thumbnailStyle, ct);
             }
 
             progress.Report(JobProgress.Stage("Cover thumbnail 9:16 siap: " + Path.GetFileName(thumbnailPath)));
@@ -311,22 +308,9 @@ public sealed class ClipPipeline
             var heroSeconds = clip.HeroFrameSeconds ?? clip.Start;
             var relativeHero = ThumbnailComposer.CalculateRelativeHeroTime(clip, heroSeconds);
             var previewPath = Path.Combine(job, "thumbnail-preview.jpg");
-            if (clip.EnableOpeningMotion && thumbnailStyle.HookEnabled && !preserveSourceAspectRatio)
-            {
-                var duration = clip.OpeningMotionDurationSeconds > 0 ? clip.OpeningMotionDurationSeconds : 2.0;
-                var openingPath = Path.Combine(job, "thumbnail-preview-opening.mp4");
-                await ThumbnailComposer.RenderOpeningMotionCompositeAsync(
-                    source, relativeHero, hookText, openingPath, job, cropExpression,
-                    clip.PreserveFullFrame, thumbnailStyle, duration, ct);
-                await ThumbnailComposer.ExtractThumbnailFromMotionAsync(
-                    openingPath, previewPath, job, Math.Min(duration * 0.6, 1.2), ct);
-            }
-            else
-            {
-                await ThumbnailComposer.GenerateStaticThumbnailAsync(
-                    source, relativeHero, hookText, previewPath, job, cropExpression,
-                    clip.PreserveFullFrame, thumbnailStyle, ct);
-            }
+            await ThumbnailComposer.GenerateStaticThumbnailAsync(
+                source, relativeHero, hookText, previewPath, job, cropExpression,
+                clip.PreserveFullFrame, thumbnailStyle, ct);
             return await File.ReadAllBytesAsync(previewPath, ct);
         }
         finally
