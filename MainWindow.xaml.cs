@@ -2327,16 +2327,30 @@ public partial class MainWindow : Window
 
     private void SaveManifestEdits()
     {
-        if (_manifest is null || string.IsNullOrWhiteSpace(_manifestPath)) return;
-        try
+        if (_manifest is null) return;
+        // Keep the imported .py manifest file strictly read-only on disk.
+        // User edits to titles, descriptions, and timestamps stay in memory for rendering and queue.
+        if (_manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase))
         {
-            ClipperJobScript.Save(_manifestPath, _manifest, _clips);
-            WriteLog("Candidate and metadata changes saved to the Gemini manifest.");
+            _manifest.KeepSegments = _clips.FirstOrDefault()?.KeptSegments ?? [];
+            _manifest.YouTubeTitle = _clips.FirstOrDefault()?.YouTubeTitle ?? string.Empty;
+            _manifest.YouTubeDescription = _clips.FirstOrDefault()?.YouTubeDescription ?? string.Empty;
         }
-        catch (Exception ex)
+        else
         {
-            SetStatus("STATUS: Changes could not be saved to the manifest.", true);
-            WriteLog("ERROR saving manifest: " + ex.Message);
+            _manifest.ClipsData = _clips.Select(clip => new ClipperJobClip
+            {
+                Id = clip.Name,
+                StartSeconds = clip.Start,
+                EndSeconds = clip.End,
+                Selected = clip.IsSelected,
+                Hook = clip.Hook,
+                Reason = clip.Reason,
+                Caption = clip.Caption,
+                Hashtags = clip.Hashtags.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                YouTubeTitle = clip.YouTubeTitle,
+                YouTubeDescription = clip.YouTubeDescription
+            }).ToList();
         }
     }
 
