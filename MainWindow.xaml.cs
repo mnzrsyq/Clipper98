@@ -19,6 +19,7 @@ namespace Clipper98;
 
 public partial class MainWindow : Window
 {
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static readonly HttpClient PreviewHttpClient = new() { Timeout = TimeSpan.FromSeconds(8) };
     private readonly ClipPipeline _pipeline = new();
     private CancellationTokenSource? _cts;
@@ -76,6 +77,9 @@ public partial class MainWindow : Window
         ShortClipSubtitleCheckBox.IsChecked = _settings.UseShortClipSubtitles;
         LoadSavedSubtitlePresets();
         FramePathText.Text = string.IsNullOrWhiteSpace(_settings.FramePngPath) ? "No frame selected" : _settings.FramePngPath;
+        SetCombo(ThumbnailFontBox, string.IsNullOrWhiteSpace(_settings.ThumbnailFontName) ? "Anton" : _settings.ThumbnailFontName);
+        SetCombo(OpeningMotionDurationBox, (_settings.OpeningMotionDurationSeconds > 0 ? _settings.OpeningMotionDurationSeconds : 2.0).ToString("0.0", Inv) + "s");
+        OpeningMotionCheckBox.IsChecked = _settings.EnableOpeningMotion;
         Loaded += (_, _) =>
         {
             _windowReady = true;
@@ -110,13 +114,13 @@ public partial class MainWindow : Window
             var seconds = int.TryParse(SelectedText(TargetDurationBox, "0"), out var value) ? value : 0;
             var narration = CondensedNarrationCheckBox.IsChecked == true ? "on" : "off";
             return seconds == 0
-                ? $"{url}\ntarget_duration_seconds=0 narration={narration}\nRingkas video ini menjadi satu video utuh lebih pendek dengan membuang bagian yang tidak perlu tanpa mempercepat. Jaga alur visual dan audio. Buat narasi VO yang natural hanya jika diminta, sertakan judul dan deskripsi YouTube, serta tentukan hero_frame_seconds dan thumbnail_hook (2-4 kata ALL CAPS)."
-                : $"{url}\ntarget_duration_seconds={seconds} narration={narration}\nRingkas video ini menjadi satu video utuh sekitar {seconds / 60} menit tanpa mempercepat. Jika target merusak alur, pertahankan konteks dan sarankan durasi lebih panjang. Buat narasi VO yang natural hanya jika diminta, sertakan judul dan deskripsi YouTube, serta tentukan hero_frame_seconds dan thumbnail_hook (2-4 kata ALL CAPS).";
+                ? $"{url}\ntarget_duration_seconds=0 narration={narration}\nRingkas video ini menjadi satu video utuh lebih pendek dengan membuang bagian yang tidak perlu tanpa mempercepat. Jaga alur visual dan audio. Buat narasi VO yang natural hanya jika diminta, sertakan judul dan deskripsi YouTube dengan minimal 5 hashtag relevan potensi viral, serta tentukan hero_frame_seconds dan thumbnail_hook (2-4 kata ALL CAPS)."
+                : $"{url}\ntarget_duration_seconds={seconds} narration={narration}\nRingkas video ini menjadi satu video utuh sekitar {seconds / 60} menit tanpa mempercepat. Jika target merusak alur, pertahankan konteks dan sarankan durasi lebih panjang. Buat narasi VO yang natural hanya jika diminta, sertakan judul dan deskripsi YouTube dengan minimal 5 hashtag relevan potensi viral, serta tentukan hero_frame_seconds dan thumbnail_hook (2-4 kata ALL CAPS).";
         }
 
         var requested = int.TryParse(CandidateCountBox.Text, out var count) ? Math.Clamp(count, 1, 20) : 5;
         CandidateCountBox.Text = requested.ToString();
-        return $"{url}\nrequested_candidate_count={requested}\nPilih {requested} kandidat klip pendek yang mandiri. Untuk setiap kandidat, tentukan detik visual terbaik (hero_frame_seconds) dan hook thumbnail (thumbnail_hook 2-4 kata ALL CAPS), serta sertakan judul YouTube maksimal 100 karakter, deskripsi siap tempel, dan maksimal 3 hashtag relevan.";
+        return $"{url}\nrequested_candidate_count={requested}\nPilih {requested} kandidat klip pendek yang mandiri. Untuk setiap kandidat, tentukan detik visual terbaik (hero_frame_seconds) dan hook thumbnail (thumbnail_hook 2-4 kata ALL CAPS), serta sertakan judul YouTube maksimal 100 karakter, deskripsi siap tempel, dan minimal 5 hashtag relevan potensi viral.";
     }
 
     private bool IsCondensedMode => SelectedText(ProcessingModeBox, "short_clips") == "condense";
@@ -134,6 +138,7 @@ public partial class MainWindow : Window
                 _manifestPath = null;
                 _clips.Clear();
                 ClipList.ItemsSource = null;
+                UpdateSelectAllCheckBoxState();
                 _scan = null;
                 ClipDetail.Text = "Mode changed. Copy the prompt for this mode, then import the manifest from Gemini.";
                 RenderButton.IsEnabled = false;
@@ -319,6 +324,7 @@ public partial class MainWindow : Window
                 TranscriptSource = "Gemini"
             };
             ClipList.ItemsSource = _clips;
+            UpdateSelectAllCheckBoxState();
             if (_clips.Count > 0) ClipList.SelectedIndex = 0;
             WorkProgress.IsIndeterminate = false;
             WorkProgress.Value = 100;
@@ -342,7 +348,38 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ClipSelection_Click(object sender, RoutedEventArgs e) => SaveManifestEdits();
+    private void ClipSelection_Click(object sender, RoutedEventArgs e)
+    {
+        SaveManifestEdits();
+        UpdateSelectAllCheckBoxState();
+    }
+
+    private void SelectAllClips_Click(object sender, RoutedEventArgs e)
+    {
+        var isChecked = SelectAllClipsCheckBox.IsChecked == true;
+        foreach (var clip in _clips)
+        {
+            clip.IsSelected = isChecked;
+        }
+        ClipList.Items.Refresh();
+        SaveManifestEdits();
+        UpdateSelectAllCheckBoxState();
+    }
+
+    private void UpdateSelectAllCheckBoxState()
+    {
+        if (SelectAllClipsCheckBox is null) return;
+        if (_clips.Count == 0)
+        {
+            SelectAllClipsCheckBox.IsChecked = false;
+            if (CandidatesCountText is not null) CandidatesCountText.Text = "0 clips";
+            return;
+        }
+        var selectedCount = _clips.Count(c => c.IsSelected);
+        SelectAllClipsCheckBox.IsChecked = selectedCount == _clips.Count ? true : (selectedCount == 0 ? false : null);
+        if (CandidatesCountText is not null)
+            CandidatesCountText.Text = $"{selectedCount}/{_clips.Count} selected";
+    }
 
     private async void RenderButton_Click(object sender, RoutedEventArgs e)
     {
@@ -481,6 +518,8 @@ public partial class MainWindow : Window
                 EndSeconds = clip.End,
                 HeroFrameSeconds = clip.HeroFrameSeconds,
                 ThumbnailHook = clip.ThumbnailHook,
+                ThumbnailFont = clip.ThumbnailFontName,
+                OpeningMotionDurationSeconds = clip.OpeningMotionDurationSeconds,
                 Selected = true,
                 Hook = clip.Hook,
                 Reason = clip.Reason,
@@ -490,7 +529,9 @@ public partial class MainWindow : Window
             Segments = clip.KeptSegments,
             HeroFrameSeconds = clip.HeroFrameSeconds,
             ThumbnailHook = clip.ThumbnailHook,
+            ThumbnailFont = clip.ThumbnailFontName,
             EnableOpeningMotion = clip.EnableOpeningMotion,
+            OpeningMotionDurationSeconds = clip.OpeningMotionDurationSeconds,
             UseSubtitles = useSubtitles,
             UseNarration = useNarration,
             TtsOptions = ttsOptions,
@@ -608,7 +649,9 @@ public partial class MainWindow : Window
             _updatingClipControls = true;
             ThumbnailHookBox.Text = string.Empty;
             HeroFrameTimeBox.Text = "00:00:00";
-            OpeningMotionCheckBox.IsChecked = false;
+            OpeningMotionCheckBox.IsChecked = _settings.EnableOpeningMotion;
+            SetCombo(OpeningMotionDurationBox, (_settings.OpeningMotionDurationSeconds > 0 ? _settings.OpeningMotionDurationSeconds : 2.0).ToString("0.0", Inv) + "s");
+            SetCombo(ThumbnailFontBox, string.IsNullOrWhiteSpace(_settings.ThumbnailFontName) ? "Anton" : _settings.ThumbnailFontName);
             _updatingClipControls = false;
             UpdateModeDependentControls();
             UpdatePreview();
@@ -627,6 +670,8 @@ public partial class MainWindow : Window
         var heroSec = clip.HeroFrameSeconds ?? clip.Start;
         HeroFrameTimeBox.Text = TimeSpan.FromSeconds(heroSec).ToString(@"hh\:mm\:ss");
         OpeningMotionCheckBox.IsChecked = clip.EnableOpeningMotion;
+        SetCombo(OpeningMotionDurationBox, (clip.OpeningMotionDurationSeconds > 0 ? clip.OpeningMotionDurationSeconds : 2.0).ToString("0.0", Inv) + "s");
+        SetCombo(ThumbnailFontBox, !string.IsNullOrWhiteSpace(clip.ThumbnailFontName) ? clip.ThumbnailFontName : "Anton");
         TimestampEditPanel.Visibility = clip.KeptSegments.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
         _updatingClipControls = false;
         UpdatePreview();
@@ -2248,14 +2293,23 @@ public partial class MainWindow : Window
         Canvas.SetTop(PreviewCaption, 0);
         PreviewPlaceholder.Visibility = PreviewBackdrop.Source is null ? Visibility.Visible : Visibility.Collapsed;
 
-        if (PreviewHookBadge is not null && PreviewHookText is not null)
+        if (PreviewHookBadge is not null && PreviewHookLine1 is not null && PreviewHookLine2 is not null)
         {
             var rawHook = ClipList.SelectedItem is ClipCandidate activeCandidate && !string.IsNullOrWhiteSpace(activeCandidate.ThumbnailHook)
                 ? activeCandidate.ThumbnailHook
                 : ThumbnailHookBox?.Text;
             if (!string.IsNullOrWhiteSpace(rawHook))
             {
-                PreviewHookText.Text = rawHook.Trim().ToUpperInvariant();
+                var fontName = (ClipList.SelectedItem as ClipCandidate)?.ThumbnailFontName ?? SelectedText(ThumbnailFontBox, "Anton");
+                var family = new System.Windows.Media.FontFamily(fontName + ", Impact, Segoe UI Black");
+                PreviewHookLine1.FontFamily = family;
+                PreviewHookLine2.FontFamily = family;
+
+                var (l1, l2) = ThumbnailComposer.SplitHookWords(rawHook);
+                PreviewHookLine1.Text = l1;
+                PreviewHookLine2.Text = l2;
+                PreviewHookLine2.Visibility = string.IsNullOrWhiteSpace(l2) ? Visibility.Collapsed : Visibility.Visible;
+                Canvas.SetTop(PreviewHookBadge, string.IsNullOrWhiteSpace(l2) ? 90 : 70);
                 PreviewHookBadge.Visibility = Visibility.Visible;
             }
             else
@@ -2346,8 +2400,10 @@ public partial class MainWindow : Window
         PositionYSlider.IsEnabled = !busy;
         ThumbnailExpander.IsEnabled = !busy;
         ThumbnailHookBox.IsEnabled = !busy;
+        ThumbnailFontBox.IsEnabled = !busy;
         HeroFrameTimeBox.IsEnabled = !busy;
         OpeningMotionCheckBox.IsEnabled = !busy;
+        OpeningMotionDurationBox.IsEnabled = !busy;
         YouTubeMetadataExpander.IsEnabled = !busy;
         RenderButton.IsEnabled = !busy && ClipList.SelectedItem is not null;
         CancelButton.IsEnabled = busy;
@@ -2372,6 +2428,8 @@ public partial class MainWindow : Window
             _manifest.YouTubeDescription = first?.YouTubeDescription ?? string.Empty;
             _manifest.HeroFrameSeconds = first?.HeroFrameSeconds;
             _manifest.ThumbnailHook = first?.ThumbnailHook ?? string.Empty;
+            _manifest.ThumbnailFont = first?.ThumbnailFontName ?? "Anton";
+            _manifest.OpeningMotionDurationSeconds = first?.OpeningMotionDurationSeconds ?? 2.0;
         }
         else
         {
@@ -2382,6 +2440,8 @@ public partial class MainWindow : Window
                 EndSeconds = clip.End,
                 HeroFrameSeconds = clip.HeroFrameSeconds,
                 ThumbnailHook = clip.ThumbnailHook,
+                ThumbnailFont = clip.ThumbnailFontName,
+                OpeningMotionDurationSeconds = clip.OpeningMotionDurationSeconds,
                 Selected = clip.IsSelected,
                 Hook = clip.Hook,
                 Reason = clip.Reason,
@@ -2408,6 +2468,30 @@ public partial class MainWindow : Window
         UpdatePreview();
     }
 
+    private void ThumbnailFontBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var font = (ThumbnailFontBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Anton";
+        _settings.ThumbnailFontName = font;
+        SettingsStore.Save(_settings);
+        if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
+        clip.ThumbnailFontName = font;
+        SaveManifestEdits();
+        UpdatePreview();
+    }
+
+    private void OpeningMotionDuration_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        var tag = (OpeningMotionDurationBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "2.0";
+        if (double.TryParse(tag, NumberStyles.Any, CultureInfo.InvariantCulture, out var sec))
+        {
+            _settings.OpeningMotionDurationSeconds = sec;
+            SettingsStore.Save(_settings);
+            if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
+            clip.OpeningMotionDurationSeconds = sec;
+            SaveManifestEdits();
+        }
+    }
+
     private void HeroFrame_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
@@ -2431,10 +2515,11 @@ public partial class MainWindow : Window
 
     private void OpeningMotion_Changed(object sender, RoutedEventArgs e)
     {
-        if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
-        clip.EnableOpeningMotion = OpeningMotionCheckBox.IsChecked == true;
-        _settings.EnableOpeningMotion = clip.EnableOpeningMotion;
+        var isChecked = OpeningMotionCheckBox.IsChecked == true;
+        _settings.EnableOpeningMotion = isChecked;
         SettingsStore.Save(_settings);
+        if (_updatingClipControls || ClipList.SelectedItem is not ClipCandidate clip) return;
+        clip.EnableOpeningMotion = isChecked;
         SaveManifestEdits();
     }
 

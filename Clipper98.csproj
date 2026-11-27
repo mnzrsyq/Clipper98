@@ -22,6 +22,7 @@
     <Content Include=".gemini\skills\clipper-ringkas\SKILL.md" Link=".gemini\skills\clipper-ringkas\SKILL.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="README.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="HOW-TO-USE.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="tools\fonts\**\*" Link="tools\fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="models\LICENSE-OpenCV.txt" Link="tools\models\LICENSE-OpenCV.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

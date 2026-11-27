@@ -204,22 +204,48 @@ public sealed class ClipPipeline
             ? clip.ThumbnailHook
             : (!string.IsNullOrWhiteSpace(clip.Hook) ? clip.Hook : "KLIP TERBAIK");
 
-        string? fontsDir = null;
-        if (!string.IsNullOrWhiteSpace(style.FontFilePath))
-            fontsDir = Path.Combine(job, "render-fonts");
+        var toolsFontsDir = Path.Combine(AppContext.BaseDirectory, "tools", "fonts");
+        if (!Directory.Exists(toolsFontsDir))
+        {
+            var alt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "fonts");
+            if (Directory.Exists(alt)) toolsFontsDir = alt;
+        }
+
+        var renderFontsDir = Path.Combine(job, "render-fonts");
+        Directory.CreateDirectory(renderFontsDir);
+        if (Directory.Exists(toolsFontsDir))
+        {
+            foreach (var f in Directory.EnumerateFiles(toolsFontsDir))
+            {
+                var ext = Path.GetExtension(f);
+                if (ext.Equals(".ttf", StringComparison.OrdinalIgnoreCase) || ext.Equals(".otf", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dest = Path.Combine(renderFontsDir, Path.GetFileName(f));
+                    if (!File.Exists(dest)) File.Copy(f, dest, overwrite: true);
+                }
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(style.FontFilePath) && File.Exists(style.FontFilePath))
+        {
+            var dest = Path.Combine(renderFontsDir, Path.GetFileName(style.FontFilePath));
+            if (!File.Exists(dest)) File.Copy(style.FontFilePath, dest, overwrite: true);
+        }
+        var fontsDir = renderFontsDir;
+        var thumbFont = !string.IsNullOrWhiteSpace(clip.ThumbnailFontName) ? clip.ThumbnailFontName : "Anton";
+        var openingDuration = clip.OpeningMotionDurationSeconds > 0 ? clip.OpeningMotionDurationSeconds : 2.0;
 
         try
         {
             if (clip.EnableOpeningMotion && !preserveSourceAspectRatio)
             {
-                progress.Report(JobProgress.Stage("Rendering Opening Video Motion Composite (2s)..."));
+                progress.Report(JobProgress.Stage($"Rendering Opening Video Motion Composite ({openingDuration:0.#}s)..."));
                 var openingMp4 = Path.Combine(job, "opening_motion.mp4");
                 await ThumbnailComposer.RenderOpeningMotionCompositeAsync(
                     source, relativeHero, hookText, openingMp4, job, cropExpression,
-                    clip.PreserveFullFrame, style.FontName, fontsDir, ct);
+                    clip.PreserveFullFrame, thumbFont, fontsDir, openingDuration, ct);
 
                 progress.Report(JobProgress.Stage("Mengekstrak cover thumbnail statis dari puncak animasi Video Motion Composite..."));
-                await ThumbnailComposer.ExtractThumbnailFromMotionAsync(openingMp4, thumbnailPath, job, ct);
+                await ThumbnailComposer.ExtractThumbnailFromMotionAsync(openingMp4, thumbnailPath, job, Math.Min(openingDuration * 0.6, 1.2), ct);
 
                 var mainRenderedMp4 = Path.Combine(job, "main_rendered.mp4");
                 await _renderer.RenderAsync(source, assFile, mainRenderedMp4, job, cropExpression, clip.PreserveFullFrame,
@@ -238,7 +264,7 @@ public sealed class ClipPipeline
                 progress.Report(JobProgress.Stage("Membuat cover thumbnail 9:16 statis dengan teks hook..."));
                 await ThumbnailComposer.GenerateStaticThumbnailAsync(
                     source, relativeHero, hookText, thumbnailPath, job, cropExpression,
-                    clip.PreserveFullFrame, style.FontName, fontsDir, ct);
+                    clip.PreserveFullFrame, thumbFont, fontsDir, ct);
             }
 
             progress.Report(JobProgress.Stage("Cover thumbnail 9:16 siap: " + Path.GetFileName(thumbnailPath)));

@@ -30,7 +30,7 @@ public static class ThumbnailComposer
     public static void WriteHookAss(string assPath, string rawHook, bool isMotionAnimated, string? fontName = null)
     {
         var (line1, line2) = SplitHookWords(rawHook);
-        var resolvedFont = string.IsNullOrWhiteSpace(fontName) ? "Segoe UI Black" : fontName.Trim();
+        var resolvedFont = string.IsNullOrWhiteSpace(fontName) ? "Anton" : fontName.Trim();
 
         using var writer = new StreamWriter(assPath, false, new UTF8Encoding(false));
         writer.WriteLine("[Script Info]");
@@ -40,29 +40,29 @@ public static class ThumbnailComposer
         writer.WriteLine();
         writer.WriteLine("[V4+ Styles]");
         writer.WriteLine("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding");
-        // Style Pill: kotak latar belakang berwarna ungu/crimson tua dengan teks putih
-        writer.WriteLine($"Style: HookPill,{resolvedFont},66,&H00FFFFFF,&H00000000,&H007A107A,&H007A107A,-1,0,0,0,100,100,3,0,3,18,0,5,50,50,0,1");
-        // Style Punch: teks besar tebal warna neon yellow dengan outline hitam pekat dan drop shadow
-        writer.WriteLine($"Style: HookPunch,{resolvedFont},98,&H0020E5FF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,14,7,5,50,50,0,1");
+        // Style Pill: kotak latar belakang berwarna crimson / deep red elegan dengan teks putih bersih
+        writer.WriteLine($"Style: HookPill,{resolvedFont},105,&H00FFFFFF,&H00000000,&H001810C0,&H001810C0,-1,0,0,0,100,100,2,0,3,22,0,5,40,40,0,1");
+        // Style Punch: teks raksasa super tebal warna neon yellow dengan outline hitam tebal dan drop shadow 3D
+        writer.WriteLine($"Style: HookPunch,{resolvedFont},155,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,100,100,2,0,1,18,9,5,40,40,0,1");
         writer.WriteLine();
         writer.WriteLine("[Events]");
         writer.WriteLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
 
         var hasLine2 = !string.IsNullOrWhiteSpace(line2);
-        var y1 = hasLine2 ? 470 : 540;
-        var y2 = 610;
+        var y1 = hasLine2 ? 470 : 560;
+        var y2 = 660;
 
         if (isMotionAnimated)
         {
             // Efek pop-in scale bounce modern:
-            // Baris 1: t=0ms..220ms (scale 35% -> 112%), t=220ms..320ms (112% -> 100%)
-            var anim1 = @"{\pos(540," + y1 + @")\fscx35\fscy35\t(0,220,\fscx112\fscy112)\t(220,320,\fscx100\fscy100)}" + line1;
+            // Baris 1: t=0ms..220ms (scale 30% -> 112%), t=220ms..320ms (112% -> 100%)
+            var anim1 = @"{\pos(540," + y1 + @")\fscx30\fscy30\t(0,220,\fscx112\fscy112)\t(220,320,\fscx100\fscy100)}" + line1;
             writer.WriteLine($"Dialogue: 0,0:00:00.00,0:00:05.00,HookPill,,0,0,0,,{anim1}");
 
             if (hasLine2)
             {
-                // Baris 2: t=100ms..340ms (scale 35% -> 115%), t=340ms..440ms (115% -> 100%)
-                var anim2 = @"{\pos(540," + y2 + @")\fscx35\fscy35\t(100,340,\fscx115\fscy115)\t(340,440,\fscx100\fscy100)}" + line2;
+                // Baris 2: t=100ms..340ms (scale 30% -> 115%), t=340ms..440ms (115% -> 100%)
+                var anim2 = @"{\pos(540," + y2 + @")\fscx30\fscy30\t(100,340,\fscx115\fscy115)\t(340,440,\fscx100\fscy100)}" + line2;
                 writer.WriteLine($"Dialogue: 1,0:00:00.00,0:00:05.00,HookPunch,,0,0,0,,{anim2}");
             }
         }
@@ -154,6 +154,7 @@ public static class ThumbnailComposer
         bool preserveFullFrame,
         string? fontName,
         string? fontsDir,
+        double openingDurationSeconds,
         CancellationToken ct)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
@@ -176,14 +177,14 @@ public static class ThumbnailComposer
             vFilter = $"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0,scale=1080:1920[base];[base]{subFilter}";
         }
 
-        const double openingDuration = 2.2;
+        var duration = openingDurationSeconds > 0 ? openingDurationSeconds : 2.0;
         var hasAudio = (await MediaProbe.ProbeAsync(sourceVideo, ct)).HasAudio;
 
         var args = new List<string>
         {
             "-y",
             "-ss", relativeHeroSeconds.ToString("0.###", Inv),
-            "-t", openingDuration.ToString("0.###", Inv),
+            "-t", duration.ToString("0.###", Inv),
             "-i", sourceVideo,
             "-filter_complex", $"[0:v]{vFilter}[vout]",
             "-map", "[vout]"
@@ -191,17 +192,18 @@ public static class ThumbnailComposer
 
         if (hasAudio)
         {
-            args.AddRange(["-map", "0:a", "-af", "afade=t=out:st=2.0:d=0.2,aresample=48000"]);
+            var fadeStart = Math.Max(0.2, duration - 0.25);
+            args.AddRange(["-map", "0:a", "-af", $"afade=t=out:st={fadeStart.ToString("0.###", Inv)}:d=0.25,aresample=48000"]);
         }
         else
         {
-            args.AddRange(["-f", "lavfi", "-t", openingDuration.ToString("0.###", Inv), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000", "-map", "1:a"]);
+            args.AddRange(["-f", "lavfi", "-t", duration.ToString("0.###", Inv), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000", "-map", "1:a"]);
         }
 
         args.AddRange([
             "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-            "-t", openingDuration.ToString("0.###", Inv),
+            "-t", duration.ToString("0.###", Inv),
             outputOpeningMp4
         ]);
 
@@ -216,14 +218,16 @@ public static class ThumbnailComposer
         string motionVideoPath,
         string outputJpgPath,
         string workDir,
+        double extractTimeSeconds,
         CancellationToken ct)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
-        // Ekstrak pada detik 1.2s saat animasi pop-in sudah selesai membal dan semua elemen tampak penuh
+        // Ekstrak pada puncak animasi pop-in (default 1.0s)
+        var targetTime = Math.Max(0.5, extractTimeSeconds);
         var args = new List<string>
         {
             "-y",
-            "-ss", "00:00:01.200",
+            "-ss", targetTime.ToString("0.###", Inv),
             "-i", motionVideoPath,
             "-frames:v", "1",
             "-q:v", "2",

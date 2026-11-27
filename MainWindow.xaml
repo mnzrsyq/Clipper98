@@ -131,19 +131,44 @@
           </StackPanel>
         </Border>
         <GroupBox x:Name="ClipListGroupBox" Grid.Row="1" Header="CLIP CANDIDATES" Background="{DynamicResource WindowBrush}">
-          <ListBox x:Name="ClipList" SelectionChanged="ClipList_SelectionChanged" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Background="{DynamicResource InputBrush}" Foreground="{DynamicResource InputTextBrush}">
-            <ListBox.ItemTemplate>
-              <DataTemplate>
-                <DockPanel Margin="2">
-                  <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Click="ClipSelection_Click" VerticalAlignment="Top" Margin="2,3,7,0" />
-                  <StackPanel>
-                    <TextBlock Text="{Binding Hook}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding TimeRange}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" />
-                  </StackPanel>
-                </DockPanel>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <DockPanel Grid.Row="0" Margin="2,0,2,6">
+              <TextBlock x:Name="CandidatesCountText" Text="0 clips" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+            </DockPanel>
+            <ListView x:Name="ClipList" Grid.Row="1" SelectionChanged="ClipList_SelectionChanged" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Background="{DynamicResource InputBrush}" Foreground="{DynamicResource InputTextBrush}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Width="46">
+                    <GridViewColumn.Header>
+                      <CheckBox x:Name="SelectAllClipsCheckBox" Click="SelectAllClips_Click" IsChecked="True" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Check all / Uncheck all" />
+                    </GridViewColumn.Header>
+                    <GridViewColumn.CellTemplate>
+                      <DataTemplate>
+                        <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Click="ClipSelection_Click" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,2" />
+                      </DataTemplate>
+                    </GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                  <GridViewColumn Header="TITLE" Width="220">
+                    <GridViewColumn.CellTemplate>
+                      <DataTemplate>
+                        <StackPanel Margin="0,2,4,2">
+                          <TextBlock Text="{Binding DisplayTitle}" FontWeight="Bold" TextWrapping="Wrap" MaxHeight="36" TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayTitle}" />
+                          <DockPanel Margin="0,2,0,0">
+                            <TextBlock Text="{Binding TimeRange}" Foreground="{DynamicResource FocusBrush}" FontSize="10" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Hook}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                          </DockPanel>
+                        </StackPanel>
+                      </DataTemplate>
+                    </GridViewColumn.CellTemplate>
+                  </GridViewColumn>
+                </GridView>
+              </ListView.View>
+            </ListView>
+          </Grid>
         </GroupBox>
         <StackPanel x:Name="EditorClipDetailsPanel" Grid.Row="2" Margin="0,7,0,0">
           <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
@@ -174,9 +199,16 @@
                 </Border>
                 <Image x:Name="PreviewFullFrame" Width="270" Height="480" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False" />
                 <Image x:Name="PreviewFrame" Width="270" Height="480" Stretch="Fill" IsHitTestVisible="False" />
-                <Border x:Name="PreviewHookBadge" Canvas.Top="60" Canvas.Left="15" Width="240" Background="#B8004F" BorderBrush="#FFD329" BorderThickness="2" CornerRadius="4" Padding="6,4" Visibility="Collapsed" IsHitTestVisible="False">
-                  <TextBlock x:Name="PreviewHookText" Text="HOOK TITLE" Foreground="#FFFFFF" FontFamily="Segoe UI" FontWeight="Black" FontSize="13" TextAlignment="Center" TextWrapping="Wrap" />
-                </Border>
+                <StackPanel x:Name="PreviewHookBadge" Canvas.Top="70" Canvas.Left="15" Width="240" Visibility="Collapsed" IsHitTestVisible="False">
+                  <Border x:Name="PreviewHookPillBorder" Background="#C01018" CornerRadius="12" Padding="10,3" HorizontalAlignment="Center" Margin="0,0,0,3">
+                    <TextBlock x:Name="PreviewHookLine1" Text="HOOK TITLE" Foreground="#FFFFFF" FontFamily="Segoe UI" FontWeight="Bold" FontSize="11" TextAlignment="Center" />
+                  </Border>
+                  <TextBlock x:Name="PreviewHookLine2" Text="PUNCH HOOK" Foreground="#FFFA00" FontFamily="Segoe UI" FontWeight="Black" FontSize="16" TextAlignment="Center" TextWrapping="Wrap">
+                    <TextBlock.Effect>
+                      <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="2" Direction="315" Opacity="0.95" />
+                    </TextBlock.Effect>
+                  </TextBlock>
+                </StackPanel>
                 <local:CaptionPreviewElement x:Name="PreviewCaption" Canvas.Left="20" Width="230" Height="480" IsHitTestVisible="False" />
               </Canvas>
             </Border>
@@ -293,15 +325,35 @@
             <Separator Margin="0,12,0,8" />
             <Expander x:Name="ThumbnailExpander" Header="THUMBNAIL &amp; OPENING HOOK" IsExpanded="True">
               <StackPanel Margin="2,6,2,2">
-                <TextBlock Text="Thumbnail 9:16 statis wajib dibuat untuk setiap klip/video. Opening Motion Composite (animasi 2-3s) bersifat opsional." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <TextBlock Text="Thumbnail 9:16 statis wajib dibuat untuk setiap klip/video. Opening Motion Composite (animasi 1-4s) bersifat opsional." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
                 <TextBlock Text="THUMBNAIL HOOK (2-4 KATA ALL CAPS)" FontWeight="Bold" Margin="0,2,0,3" />
                 <TextBox x:Name="ThumbnailHookBox" TextChanged="ThumbnailHook_TextChanged" LostFocus="ThumbnailHook_LostFocus" ToolTip="Contoh: ROASTING SAIFUL GOSONG" />
                 <DockPanel Margin="0,8,0,4">
                   <TextBlock Text="HERO FRAME (TIMESTAMP)" FontWeight="Bold" VerticalAlignment="Center" ToolTip="Format HH:MM:SS atau detik" />
                   <TextBox x:Name="HeroFrameTimeBox" Width="80" HorizontalAlignment="Right" TextChanged="HeroFrame_TextChanged" LostFocus="HeroFrame_LostFocus" ToolTip="Format HH:MM:SS atau detik" />
                 </DockPanel>
-                <CheckBox x:Name="OpeningMotionCheckBox" Content="Opening Video Motion Composite (2s)" Margin="0,6,0,2" Checked="OpeningMotion_Changed" Unchecked="OpeningMotion_Changed" ToolTip="Tambahkan animasi motion pop-in hook di awal video klip" />
-                <TextBlock Text="Jika aktif, thumbnail statis diekstrak dari puncak animasi Video Motion Composite. Jika mati, diambil dari hero frame video asli." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="18,0,0,6" />
+                <TextBlock Text="FONT COVER THUMBNAIL" FontWeight="Bold" Margin="0,6,0,3" />
+                <ComboBox x:Name="ThumbnailFontBox" SelectionChanged="ThumbnailFontBox_SelectionChanged" ToolTip="Pilih font teks cover thumbnail (Anton sangat direkomendasikan untuk viral Shorts)">
+                  <ComboBoxItem Content="Anton (Rekomendasi Viral Shorts)" Tag="Anton" IsSelected="True" />
+                  <ComboBoxItem Content="Lilita One (Tebal &amp; Catchy)" Tag="Lilita One" />
+                  <ComboBoxItem Content="Bebas Neue (Modern Condensed)" Tag="Bebas Neue" />
+                  <ComboBoxItem Content="Montserrat Black (Clean Modern)" Tag="Montserrat" />
+                  <ComboBoxItem Content="Segoe UI Black (Classic Windows)" Tag="Segoe UI Black" />
+                </ComboBox>
+                <DockPanel Margin="0,8,0,2">
+                  <CheckBox x:Name="OpeningMotionCheckBox" Content="Opening Video Motion Composite" VerticalAlignment="Center" Checked="OpeningMotion_Changed" Unchecked="OpeningMotion_Changed" ToolTip="Tambahkan animasi motion pop-in hook di awal video klip" />
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock Text="Durasi:" VerticalAlignment="Center" Margin="0,0,4,0" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
+                    <ComboBox x:Name="OpeningMotionDurationBox" Width="68" Height="26" MinHeight="22" SelectionChanged="OpeningMotionDuration_Changed" ToolTip="Durasi animasi opening motion hook (default 2.0s, mengikuti last setting)">
+                      <ComboBoxItem Content="1.5s" Tag="1.5" />
+                      <ComboBoxItem Content="2.0s" Tag="2.0" IsSelected="True" />
+                      <ComboBoxItem Content="2.5s" Tag="2.5" />
+                      <ComboBoxItem Content="3.0s" Tag="3.0" />
+                      <ComboBoxItem Content="4.0s" Tag="4.0" />
+                    </ComboBox>
+                  </StackPanel>
+                </DockPanel>
+                <TextBlock Text="Jika aktif, cover thumbnail statis diekstrak dari puncak animasi Video Motion Composite. Jika mati, diambil dari hero frame video asli." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="18,0,0,6" />
               </StackPanel>
             </Expander>
 

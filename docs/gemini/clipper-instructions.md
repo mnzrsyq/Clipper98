@@ -1,3 +1,8 @@
+---
+name: clipper
+description: Memilih beberapa momen pendek mandiri dari video YouTube dan menyusun manifest yang dapat diimpor ke Clipper98. Gunakan saat ingin membuat kandidat Shorts, Reels, atau TikTok dari URL YouTube.
+---
+
 # Clipper 98
 
 ## Tujuan
@@ -63,9 +68,9 @@ CLIPPER_JOB = {
             "hook": "Hook singkat",
             "reason": "Alasan spesifik momen ini menarik",
             "caption": "Caption untuk unggahan",
-            "hashtags": ["#contoh", "#topikvideo", "#Shorts"],
+            "hashtags": ["#contoh", "#topikvideo", "#Shorts", "#viral", "#fyp"],
             "youtube_title": "Judul YouTube yang akurat dan menarik",
-            "youtube_description": "Deskripsi ringkas yang menjelaskan isi klip.\n\n#contoh #topikvideo #Shorts"
+            "youtube_description": "Deskripsi ringkas yang menjelaskan isi klip.\n\n#contoh #topikvideo #Shorts #viral #fyp"
         }
     ]
 }
@@ -87,7 +92,7 @@ CLIPPER_JOB = {
 - `requested_candidate_count` mengikuti permintaan pengguna setelah dibatasi 1–20. Jumlah aktual `clips_data` boleh berbeda; jangan menambah kandidat lemah atau membuang kandidat valid hanya demi menyamakan kedua angka.
 - `youtube_title` adalah judul yang spesifik terhadap isi potongan, mudah dipahami, menarik tanpa menyesatkan, dan maksimal 100 karakter. Letakkan pokok/topik utama di bagian awal. Hindari kapitalisasi berlebihan, keyword stuffing, janji yang tidak dipenuhi klip, dan judul generik. Sisakan ruang bila memakai emoji atau tanda baca.
 - `youtube_description` adalah deskripsi siap tempel ke YouTube Studio, maksimal 5.000 karakter. Utamakan 1–3 kalimat ringkas yang merangkum isi klip dan konteks yang benar-benar terdengar. Tambahkan ajakan ringan hanya bila alami. Jangan mengarang nama, fakta, hubungan, spesifikasi, reaksi, atau kejadian di luar klip. Akhiri dengan baris hashtag yang sama persis dengan isi `hashtags`.
-- `hashtags` berisi paling banyak 3 hashtag yang spesifik dan langsung terkait dengan klip. Tulis tanpa spasi di dalam hashtag. Hindari tag umum seperti `#viral` atau `#fyp` kecuali benar-benar relevan. Hashtag ditempatkan di baris terakhir `youtube_description`, bukan dijejalkan ke judul.
+- `hashtags` berisi minimal 5 hashtag relevan dengan potensi viral tinggi (kombinasi topik spesifik klip dan tag populer seperti #Shorts, #viral, #trending, #fyp, #foryou). Tulis tanpa spasi di dalam hashtag. Hashtag ditempatkan di baris terakhir `youtube_description`, bukan dijejalkan ke judul.
 - Buat judul dan deskripsi berbeda untuk tiap kandidat berdasarkan rentang klipnya; jangan menyalin metadata video sumber atau memakai satu deskripsi yang sama untuk semua klip.
 - Isi `duration_seconds` hanya jika durasi diketahui. Jika tidak diketahui, gunakan `None`.
 - Ambil `video_id` dari URL. Jika tidak dapat dipastikan, isi string kosong, jangan menebak.
@@ -103,7 +108,7 @@ Sebelum menyerahkan, baca ulang isi file yang tersimpan dan pastikan:
 - `schema_version` bernilai `1`, `mode` bernilai `short_clips`, `source.platform` bernilai `youtube`, URL adalah HTTPS YouTube yang valid, dan `constraints.max_height` antara 1–1080.
 - `requested_candidate_count` 1–20. `clips_data` berisi 1–20 item lengkap; jumlah aktual tidak wajib sama dengan `requested_candidate_count`.
 - Setiap ID unik dan mengikuti pola `clip_01` atau `custom_01`; `selected` boolean; timestamp angka terbatas, mulai dari 0, `end_seconds > start_seconds`, tidak melewati durasi sumber yang diketahui, dan antar klip tidak overlap.
-- Setiap klip memiliki maksimal 3 hashtag; baris hashtag terakhir pada `youtube_description` sama persis dengan list `hashtags`. Judul maksimal 100 karakter dan deskripsi maksimal 5.000 karakter.
+- Setiap klip memiliki minimal 5 hashtag relevan potensi viral; baris hashtag terakhir pada `youtube_description` sama persis dengan list `hashtags`. Judul maksimal 100 karakter dan deskripsi maksimal 5.000 karakter.
 - File benar-benar berakhir setelah kurung penutup manifest. Pastikan tidak terpotong, terutama setelah item klip terakhir.
 
 Jika pemeriksaan gagal, perbaiki file dan baca ulang. Jangan laporkan file yang belum lengkap atau belum dapat diimpor.

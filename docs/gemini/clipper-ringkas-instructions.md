@@ -1,3 +1,8 @@
+---
+name: clipper-ringkas
+description: Memilih bagian penting dari video YouTube panjang untuk membuat satu versi lebih pendek, dengan opsi narasi VO, lalu menyusun manifest Clipper98. Gunakan saat ingin meringkas satu video tanpa mempercepatnya.
+---
+
 # Clipper Ringkas Video
 
 ## Tujuan
@@ -15,7 +20,7 @@ Buat satu manifest untuk satu video ringkas. Aplikasi Clipper98 mengunduh bagian
 7. Jika `narration=on`, tulis satu bagian VO yang ringkas untuk tiap rentang. Narasi harus terdengar seperti pencerita yang menjelaskan jalannya proses secara alami, dengan alur dan transisi antarpotongan yang enak didengar seperti video contoh pengguna. Jangan membuatnya kaku seperti daftar aksi atau laporan per frame. Sedikit jembatan narasi yang bertumpang tindih dengan perpindahan gambar boleh jika terdengar wajar.
 8. Narasi harus tetap berpijak pada audio dan visual yang benar-benar tersedia. Jelaskan aksi, perubahan, atau hasil yang dapat dilihat/didengar; jangan menambahkan sebab, niat, dialog, identitas, atau fakta yang tidak didukung. Jika detailnya kurang jelas, gunakan kalimat netral atau hilangkan detail itu. Jangan menyebut hasil yang baru terlihat pada bagian yang tidak dipertahankan.
 9. Jika `narration=off`, isi `narration` setiap bagian dengan string kosong. Jangan membuat teks VO.
-10. Selalu buat judul dan deskripsi siap tempel untuk unggahan YouTube berdasarkan keseluruhan video ringkas. Judul maksimal 100 karakter. Deskripsi boleh lebih panjang, maksimal 5.000 karakter, dan menempatkan maksimal 3 hashtag relevan pada baris terakhir.
+10. Selalu buat judul dan deskripsi siap tempel untuk unggahan YouTube berdasarkan keseluruhan video ringkas. Judul maksimal 100 karakter. Deskripsi boleh lebih panjang, maksimal 5.000 karakter, dan menempatkan minimal 5 hashtag relevan potensi viral pada baris terakhir.
 11. Target durasi adalah perkiraan, bukan batas keras. Jangan memaksa target yang merusak alur atau menghilangkan tahap penting. Nyatakan durasi yang lebih sesuai di `condensed_summary` bila perlu.
 12. Buat manifest Python data-saja dan tampilkan sebagai satu blok kode Python di chat. Isi blok kode hanya satu assignment `CLIPPER_JOB`, tanpa penjelasan atau teks tambahan. Laporkan jumlah bagian, perkiraan durasi akhir, dan judul. Minta pengguna menyalin isi blok kode tanpa tanda pagar pembuka/penutup, menyimpannya sebagai file `.py`, lalu mengimpornya ke Clipper98. Jangan mengklaim file sudah disimpan atau video telah dirender.
 
@@ -40,7 +45,7 @@ CLIPPER_JOB = {
     "thumbnail_hook": "ROASTING SAIFUL GOSONG",
     "condensed_summary": "Ringkasan isi video dan perkiraan durasi hasil yang sesuai.",
     "youtube_title": "Judul video ringkas yang spesifik dan maksimal 100 karakter",
-    "youtube_description": "Deskripsi akurat, siap tempel ke YouTube Studio.\n\n#hashtag1 #hashtag2 #Shorts",
+    "youtube_description": "Deskripsi akurat, siap tempel ke YouTube Studio.\n\n#hashtag1 #hashtag2 #Shorts #viral #fyp",
     "keep_segments": [
         {
             "start_seconds": 0,
@@ -71,7 +76,7 @@ CLIPPER_JOB = {
 - Pastikan `mode` bernilai `condense` dan `clips_data` kosong.
 - Isi `keep_segments` dengan 1–100 rentang yang berurutan, punya alasan spesifik, berada dalam durasi sumber bila diketahui, dan tidak saling tumpang tindih.
 - Jumlahkan durasi setiap rentang untuk memperkirakan panjang hasil; jangan menghitung jarak dari rentang pertama sampai terakhir.
-- Pastikan `youtube_title` sesuai isi hasil dan maksimal 100 karakter. `youtube_description` maksimal 5.000 karakter, faktual, siap unggah, dan hashtag hanya berada pada baris terakhir.
+- Pastikan `youtube_title` sesuai isi hasil dan maksimal 100 karakter. `youtube_description` maksimal 5.000 karakter, faktual, siap unggah, dan minimal 5 hashtag relevan potensi viral hanya berada pada baris terakhir.
 - `hero_frame_seconds` adalah detik visual puncak dari salah satu keep_segments (angka float atau integer) di mana visual paling menarik/klimaks untuk dijadikan cover thumbnail 9:16.
 - `thumbnail_hook` adalah teks hook cover thumbnail: WAJIB 2–4 KATA SAJA, HURUF BESAR SEMUA (ALL CAPS), sangat click-worthy / memancing rasa penasaran penonton. Dilarang membuat kalimat panjang atau generik.
 - Saat narasi aktif, isi setiap `narration` dengan VO yang mendukung rentang terkait. Dengarkan alurnya sebagai satu video utuh: kalimat boleh menjembatani cut, tetapi setiap klaim tetap harus didukung bagian video yang dipertahankan.

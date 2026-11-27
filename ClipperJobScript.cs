@@ -41,6 +41,8 @@ public static class ClipperJobScript
             manifest.YouTubeDescription = first?.YouTubeDescription ?? string.Empty;
             manifest.HeroFrameSeconds = first?.HeroFrameSeconds;
             manifest.ThumbnailHook = first?.ThumbnailHook ?? string.Empty;
+            manifest.ThumbnailFont = first?.ThumbnailFontName ?? "Anton";
+            manifest.OpeningMotionDurationSeconds = first?.OpeningMotionDurationSeconds ?? 2.0;
         }
         else
         {
@@ -51,6 +53,8 @@ public static class ClipperJobScript
                 EndSeconds = clip.End,
                 HeroFrameSeconds = clip.HeroFrameSeconds,
                 ThumbnailHook = clip.ThumbnailHook,
+                ThumbnailFont = clip.ThumbnailFontName,
+                OpeningMotionDurationSeconds = clip.OpeningMotionDurationSeconds,
                 Selected = clip.IsSelected,
                 Hook = clip.Hook,
                 Reason = clip.Reason,
@@ -141,6 +145,8 @@ public static class ClipperJobScript
                     ThumbnailHook = !string.IsNullOrWhiteSpace(manifest.ThumbnailHook)
                         ? manifest.ThumbnailHook
                         : (string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "RINGKASAN VIDEO" : manifest.CondensedSummary),
+                    ThumbnailFontName = !string.IsNullOrWhiteSpace(manifest.ThumbnailFont) ? manifest.ThumbnailFont : "Anton",
+                    OpeningMotionDurationSeconds = manifest.OpeningMotionDurationSeconds ?? 2.0,
                     Hook = string.IsNullOrWhiteSpace(manifest.CondensedSummary) ? "Condensed video" : manifest.CondensedSummary,
                     Reason = $"{orderedSegments.Count} segments retained · output about {TimeSpan.FromSeconds(keptDuration):hh\\:mm\\:ss}",
                     KeptSegments = orderedSegments,
@@ -168,6 +174,8 @@ public static class ClipperJobScript
                 End = item.EndSeconds,
                 HeroFrameSeconds = item.HeroFrameSeconds ?? (item.StartSeconds + (item.EndSeconds - item.StartSeconds) / 2.0),
                 ThumbnailHook = !string.IsNullOrWhiteSpace(item.ThumbnailHook) ? item.ThumbnailHook : item.Hook,
+                ThumbnailFontName = !string.IsNullOrWhiteSpace(item.ThumbnailFont) ? item.ThumbnailFont : "Anton",
+                OpeningMotionDurationSeconds = item.OpeningMotionDurationSeconds ?? 2.0,
                 IsSelected = item.Selected,
                 Hook = item.Hook,
                 Reason = item.Reason,

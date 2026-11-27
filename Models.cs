@@ -35,8 +35,11 @@ public sealed class ClipCandidate
     public double? HeroFrameSeconds { get; set; }
     public string ThumbnailHook { get; set; } = string.Empty;
     public bool EnableOpeningMotion { get; set; }
+    public double OpeningMotionDurationSeconds { get; set; } = 2.0;
+    public string ThumbnailFontName { get; set; } = "Anton";
     public bool PreserveFullFrame { get; set; }
     public List<CondensedSegment> KeptSegments { get; set; } = [];
+    public string DisplayTitle => !string.IsNullOrWhiteSpace(YouTubeTitle) ? YouTubeTitle : (!string.IsNullOrWhiteSpace(Hook) ? Hook : Name);
     public string TimeRange => $"{TimeSpan.FromSeconds(Start):hh\\:mm\\:ss} - {TimeSpan.FromSeconds(End):hh\\:mm\\:ss}";
 }
 
@@ -63,6 +66,8 @@ public sealed class ClipperJobManifest
     [JsonPropertyName("youtube_description")] public string YouTubeDescription { get; set; } = string.Empty;
     [JsonPropertyName("hero_frame_seconds")] public double? HeroFrameSeconds { get; set; }
     [JsonPropertyName("thumbnail_hook")] public string? ThumbnailHook { get; set; }
+    [JsonPropertyName("thumbnail_font")] public string? ThumbnailFont { get; set; }
+    [JsonPropertyName("opening_motion_duration_seconds")] public double? OpeningMotionDurationSeconds { get; set; }
     [JsonPropertyName("keep_segments")] public List<CondensedSegment> KeepSegments { get; set; } = [];
     [JsonPropertyName("constraints")] public ClipperJobConstraints Constraints { get; set; } = new();
     [JsonPropertyName("clips_data")] public List<ClipperJobClip> ClipsData { get; set; } = [];
@@ -91,6 +96,8 @@ public sealed class ClipperJobClip
     [JsonPropertyName("end_seconds")] public double EndSeconds { get; set; }
     [JsonPropertyName("hero_frame_seconds")] public double? HeroFrameSeconds { get; set; }
     [JsonPropertyName("thumbnail_hook")] public string? ThumbnailHook { get; set; }
+    [JsonPropertyName("thumbnail_font")] public string? ThumbnailFont { get; set; }
+    [JsonPropertyName("opening_motion_duration_seconds")] public double? OpeningMotionDurationSeconds { get; set; }
     [JsonPropertyName("selected")] public bool Selected { get; set; } = true;
     [JsonPropertyName("hook")] public string Hook { get; set; } = string.Empty;
     [JsonPropertyName("reason")] public string Reason { get; set; } = string.Empty;
@@ -108,7 +115,9 @@ public sealed class RenderJobRequest
     [JsonPropertyName("segments")] public List<CondensedSegment> Segments { get; set; } = [];
     [JsonPropertyName("hero_frame_seconds")] public double? HeroFrameSeconds { get; set; }
     [JsonPropertyName("thumbnail_hook")] public string? ThumbnailHook { get; set; }
+    [JsonPropertyName("thumbnail_font")] public string? ThumbnailFont { get; set; }
     [JsonPropertyName("enable_opening_motion")] public bool EnableOpeningMotion { get; set; }
+    [JsonPropertyName("opening_motion_duration_seconds")] public double OpeningMotionDurationSeconds { get; set; } = 2.0;
     [JsonPropertyName("use_narration")] public bool UseNarration { get; set; }
     [JsonPropertyName("tts_options")] public TtsOptions TtsOptions { get; set; } = new();
     [JsonPropertyName("use_subtitles")] public bool UseSubtitles { get; set; } = true;
@@ -172,6 +181,8 @@ public sealed class AppSettings
     public int TtsPitchCents { get; set; }
     public bool NightMode { get; set; }
     public bool EnableOpeningMotion { get; set; }
+    public double OpeningMotionDurationSeconds { get; set; } = 2.0;
+    public string ThumbnailFontName { get; set; } = "Anton";
     public string YouTubeClientSecretsJson { get; set; } = string.Empty;
     public List<YouTubeUploadItem> YouTubeUploadQueue { get; set; } = [];
     public DateTimeOffset? LastUploadedPublishAt { get; set; }

@@ -53,5 +53,17 @@ public static class ThemeManager
             var color = (WpfColor)WpfColorConverter.ConvertFromString(entry.Value)!;
             WpfApplication.Current.Resources[entry.Key] = new SolidColorBrush(color);
         }
+
+        // Set SystemColors brushes so popups, ComboBox dropdowns, and native controls don't show white-on-white
+        var windowColor = (WpfColor)WpfColorConverter.ConvertFromString(nightMode ? "#1E1E1E" : "#FFFFFF")!;
+        var windowTextColor = (WpfColor)WpfColorConverter.ConvertFromString(nightMode ? "#E8E8E8" : "#111111")!;
+        var controlColor = (WpfColor)WpfColorConverter.ConvertFromString(nightMode ? "#292929" : "#C0C0C0")!;
+
+        WpfApplication.Current.Resources[System.Windows.SystemColors.WindowBrushKey] = new SolidColorBrush(windowColor);
+        WpfApplication.Current.Resources[System.Windows.SystemColors.WindowTextBrushKey] = new SolidColorBrush(windowTextColor);
+        WpfApplication.Current.Resources[System.Windows.SystemColors.ControlBrushKey] = new SolidColorBrush(controlColor);
+        WpfApplication.Current.Resources[System.Windows.SystemColors.ControlTextBrushKey] = new SolidColorBrush(windowTextColor);
+        WpfApplication.Current.Resources[System.Windows.SystemColors.HighlightBrushKey] = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString(nightMode ? "#335588" : "#0A246A")!);
+        WpfApplication.Current.Resources[System.Windows.SystemColors.HighlightTextBrushKey] = new SolidColorBrush(Colors.White);
     }
 }
