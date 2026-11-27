@@ -1199,6 +1199,25 @@ public partial class MainWindow : Window
                     PersistUploadQueue();
                     throw;
                 }
+                catch (YouTubeUploadLimitExceededException ex)
+                {
+                    failures++;
+                    item.UploadStatus = "Upload limit — retry tomorrow";
+                    item.IsSelected = false;
+                    WriteLog($"Upload stopped for {item.FileName}: {ex.Message}");
+                    // Mark remaining selected items so the user knows they were not attempted
+                    for (var remaining = index + 1; remaining < selected.Count; remaining++)
+                    {
+                        selected[remaining].UploadStatus = "Upload limit — retry tomorrow";
+                        selected[remaining].IsSelected = false;
+                        failures++;
+                    }
+                    PersistUploadQueue();
+                    UploadScheduleGrid.Items.Refresh();
+                    UpdateUploadQueueSummary();
+                    SetStatus("STATUS: YouTube daily upload limit reached. No videos were uploaded. It is safe to retry tomorrow.", true);
+                    return;
+                }
                 catch (YouTubeUploadOutcomeUnknownException ex)
                 {
                     failures++;

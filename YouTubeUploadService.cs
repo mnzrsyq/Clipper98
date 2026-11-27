@@ -4,6 +4,7 @@ using Google.Apis.Services;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Google.Apis.Upload;
+using Google.Apis.Requests;
 
 namespace Clipper98;
 
@@ -64,10 +65,24 @@ public sealed class YouTubeUploadService
         Video? responseVideo = null;
         request.ProgressChanged += update => progress?.Report(update);
         request.ResponseReceived += uploaded => responseVideo = uploaded;
-        var uploadResult = await request.UploadAsync(cancellationToken);
+
+        IUploadProgress uploadResult;
+        try
+        {
+            uploadResult = await request.UploadAsync(cancellationToken);
+        }
+        catch (Google.GoogleApiException apiEx) when (IsUploadLimitExceeded(apiEx))
+        {
+            throw new YouTubeUploadLimitExceededException();
+        }
+
         if (uploadResult.Status == UploadStatus.Failed)
+        {
+            if (uploadResult.Exception is Google.GoogleApiException failApiEx && IsUploadLimitExceeded(failApiEx))
+                throw new YouTubeUploadLimitExceededException();
             throw new YouTubeUploadOutcomeUnknownException(
                 $"Google API upload status: {uploadResult.Status}. {uploadResult.Exception?.ToString() ?? "No additional error details were returned."}");
+        }
         if (uploadResult.Status != UploadStatus.Completed)
             throw new YouTubeUploadOutcomeUnknownException(
                 $"Google API upload status: {uploadResult.Status}. Check the process log for transfer progress.");
@@ -75,6 +90,22 @@ public sealed class YouTubeUploadService
         return responseVideo ?? request.ResponseBody
             ?? throw new YouTubeUploadOutcomeUnknownException(
                 "Google API reported a completed transfer but returned no video record.");
+    }
+
+    private static bool IsUploadLimitExceeded(Google.GoogleApiException ex) =>
+        ex.Error?.Errors?.Any(e =>
+            string.Equals(e.Reason, "uploadLimitExceeded", StringComparison.OrdinalIgnoreCase)) == true;
+}
+
+public sealed class YouTubeUploadLimitExceededException : Exception
+{
+    public YouTubeUploadLimitExceededException()
+        : base(
+            "YouTube has reached the daily upload limit for this channel. " +
+            "No video was uploaded — it is safe to retry tomorrow.\n\n" +
+            "To raise this limit, verify your channel with a phone number:\n" +
+            "YouTube Studio → Settings → Channel → Feature eligibility → Intermediate features → Verify.")
+    {
     }
 }
 
