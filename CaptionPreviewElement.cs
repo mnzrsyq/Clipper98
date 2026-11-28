@@ -29,7 +29,6 @@ public sealed class CaptionPreviewElement : FrameworkElement
         base.OnRender(drawingContext);
         if (ActualWidth <= 0 || ActualHeight <= 0) return;
 
-        const double scale = 480.0 / 1920.0;
         var maxChars = CaptionLayout.CharactersPerLine(_style.FontSize, _style.LetterSpacing);
         var sampleWords = CaptionTextCase.Transform(string.Join(' ', SampleWords), _style.TextCase)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -40,13 +39,13 @@ public sealed class CaptionPreviewElement : FrameworkElement
         var weight = _style.FontBold ? FontWeights.Bold : FontWeights.Normal;
         var slant = _style.FontItalic ? FontStyles.Italic : FontStyles.Normal;
         var typeface = new Typeface(_fontFamily, slant, weight, FontStretches.Normal);
-        var fontSize = _style.FontSize * scale;
+        var fontSize = (double)_style.FontSize;
         var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var tracking = _style.LetterSpacing * scale;
+        var tracking = _style.LetterSpacing;
         var primary = PreviewColor(_style.TextColor);
         var highlight = PreviewColor(_style.HighlightColor);
         var outline = _style.Outline > 0
-            ? new WpfPen(WpfBrushes.Black, _style.Outline * scale * 2) { LineJoin = PenLineJoin.Round }
+            ? new WpfPen(WpfBrushes.Black, _style.Outline) { LineJoin = PenLineJoin.Round }
             : null;
         outline?.Freeze();
 
@@ -62,7 +61,7 @@ public sealed class CaptionPreviewElement : FrameworkElement
                 + Math.Max(0, words.Count - 1) * tracking;
             var x = Math.Max(0, (ActualWidth - lineWidth) / 2);
             var lineCenter = CaptionLayout.LinePositionY(
-                _style.PositionY, lineIndex, lines.Count, _style.FontSize, _style.LineSpacing) * scale;
+                _style.PositionY, lineIndex, lines.Count, _style.FontSize, _style.LineSpacing);
 
             for (var wordIndex = 0; wordIndex < words.Count; wordIndex++)
             {
@@ -71,10 +70,11 @@ public sealed class CaptionPreviewElement : FrameworkElement
                     && _style.HighlightEnabled;
                 if (isActive && _style.HighlightMode == "box")
                 {
-                    var padding = 5 * scale;
-                    var boxHeight = Math.Max(fontSize * 0.92, fontSize * 0.7);
-                    var box = new Rect(x - padding, lineCenter - boxHeight / 2, wordWidths[wordIndex] + padding * 2, boxHeight);
-                    drawingContext.DrawRoundedRectangle(highlight, null, box, 2.5 * scale, 2.5 * scale);
+                    var boxWidth = wordWidths[wordIndex] + CaptionLayout.HighlightBoxExtraWidth;
+                    var boxHeight = fontSize + CaptionLayout.HighlightBoxExtraHeight;
+                    var boxLeft = x + (wordWidths[wordIndex] - boxWidth) / 2;
+                    var box = new Rect(boxLeft, lineCenter - boxHeight / 2, boxWidth, boxHeight);
+                    drawingContext.DrawRoundedRectangle(highlight, null, box, 2.5, 2.5);
                 }
                 var wordBrush = isActive && _style.HighlightMode != "box" ? highlight : primary;
                 if (tracking == 0)

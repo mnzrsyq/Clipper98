@@ -88,6 +88,7 @@ CLIPPER_JOB = {
 - `reason` menjelaskan secara singkat mengapa momen menarik dan bagaimana potongannya berdiri sendiri. Jangan mengklaim batas awal/akhir terverifikasi bila video atau transkrip di sekitar timestamp tidak dapat diperiksa.
 - Timestamp harus berada dalam durasi video dan tidak saling tumpang tindih. Jangan menambah padding pada awal atau akhir.
 - Gunakan ID unik berurutan: `clip_01`, `clip_02`, dan seterusnya.
+- day dan slot adalah metadata jadwal opsional. Jika pengguna hanya ingin membuat klip, hilangkan kedua field tersebut. Jika keduanya tersedia, gunakan nama hari Indonesia dan nomor slot 1–20; keduanya harus ada bersama-sama.
 - Set `selected` ke `true` untuk setiap kandidat awal; pengguna dapat memilih ulang kandidat di Clipper.
 - `requested_candidate_count` mengikuti permintaan pengguna setelah dibatasi 1–20. Jumlah aktual `clips_data` boleh berbeda; jangan menambah kandidat lemah atau membuang kandidat valid hanya demi menyamakan kedua angka.
 - `youtube_title` adalah judul yang spesifik terhadap isi potongan, mudah dipahami, menarik tanpa menyesatkan, dan maksimal 100 karakter. Letakkan pokok/topik utama di bagian awal. Hindari kapitalisasi berlebihan, keyword stuffing, janji yang tidak dipenuhi klip, dan judul generik. Sisakan ruang bila memakai emoji atau tanda baca.

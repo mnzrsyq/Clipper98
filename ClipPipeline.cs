@@ -213,6 +213,7 @@ public sealed class ClipPipeline
             await ThumbnailComposer.GenerateStaticThumbnailAsync(
                 source, relativeHero, hookText, thumbnailPath, job, cropExpression,
                 clip.PreserveFullFrame, thumbnailStyle, ct);
+            progress.Report(JobProgress.Stage("Cover thumbnail selesai. Memulai render video utama..."));
 
             if (clip.EnableOpeningMotion && thumbnailStyle.HookEnabled && !preserveSourceAspectRatio)
             {
@@ -225,17 +226,19 @@ public sealed class ClipPipeline
                 var mainRenderedMp4 = Path.Combine(job, "main_rendered.mp4");
                 await _renderer.RenderAsync(source, assFile, mainRenderedMp4, job, cropExpression, clip.PreserveFullFrame,
                     fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
-                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription);
+                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription, progress,
+                    clip.PublishDay, clip.PublishSlot);
 
                 progress.Report(JobProgress.Stage("Menyatukan Opening Motion Composite ke awal video klip..."));
                 await ThumbnailComposer.PrependOpeningToVideoAsync(openingMp4, mainRenderedMp4, output, job, ct);
-                await VideoMetadataCodec.WriteAsync(output, metadataTitle, metadataDescription, job, ct);
+                await VideoMetadataCodec.WriteAsync(output, metadataTitle, metadataDescription, job, ct, clip.PublishDay, clip.PublishSlot);
             }
             else
             {
                 await _renderer.RenderAsync(source, assFile, output, job, cropExpression, clip.PreserveFullFrame,
                     fullFrameSegments, framePngPath, style.FontFilePath, preserveSourceAspectRatio,
-                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription);
+                    useFourByFiveContentFrame, narrationTracks, ttsOptions, ct, metadataTitle, metadataDescription, progress,
+                    clip.PublishDay, clip.PublishSlot);
             }
 
             progress.Report(JobProgress.Stage("Cover thumbnail 9:16 siap: " + Path.GetFileName(thumbnailPath)));

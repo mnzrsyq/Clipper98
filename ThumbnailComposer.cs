@@ -34,9 +34,23 @@ public static class ThumbnailComposer
         if (words.Length == 3)
             return (words[0], $"{words[1]} {words[2]}");
         
-        // 4 kata atau lebih: pisahkan 2 kata di baris 1, sisanya di baris 2
-        var l1 = $"{words[0]} {words[1]}";
-        var l2 = string.Join(" ", words.Skip(2));
+        // Balance the two lines so long hooks stay visually centered as a block.
+        var split = 1;
+        var bestDifference = int.MaxValue;
+        for (var candidate = 1; candidate < words.Length; candidate++)
+        {
+            var firstLength = string.Join(" ", words.Take(candidate)).Length;
+            var secondLength = string.Join(" ", words.Skip(candidate)).Length;
+            var difference = Math.Abs(firstLength - secondLength);
+            if (difference < bestDifference)
+            {
+                bestDifference = difference;
+                split = candidate;
+            }
+        }
+
+        var l1 = string.Join(" ", words.Take(split));
+        var l2 = string.Join(" ", words.Skip(split));
         return (l1, l2);
     }
 
@@ -51,17 +65,23 @@ public static class ThumbnailComposer
             : new WpfFontFamily(familyName);
         var typeface = new Typeface(family, FontStyles.Normal, FontWeights.Black, FontStretches.Normal);
         var size = Math.Clamp(style.FontSize, 48, 220);
-        var first = MakeHookText(line1, typeface, hasLine2 ? size * 0.72 : size, ParseColor(style.FirstLineColor, Colors.White));
-        (FormattedText Layout, Geometry Geometry, WpfBrush Fill)? second = hasLine2
-            ? MakeHookText(line2, typeface, size, ParseColor(style.SecondLineColor, Colors.Yellow))
-            : null;
+        var firstSize = hasLine2 ? size * 0.72 : size;
+        var first = MakeHookText(line1, typeface, firstSize, ParseColor(style.FirstLineColor, Colors.White));
+        var secondLines = hasLine2
+            ? WrapHookLine(line2, typeface, size, ParseColor(style.SecondLineColor, Colors.Yellow))
+            : [];
 
         var lineSpacing = Math.Clamp(style.LineSpacing, 0, 100);
-        var totalHeight = first.Layout.Height + (second is null ? 0 : lineSpacing + second.Value.Layout.Height);
+        var secondHeight = secondLines.Sum(line => line.Layout.Height) + Math.Max(0, secondLines.Count - 1) * lineSpacing;
+        var totalHeight = first.Layout.Height + (secondLines.Count == 0 ? 0 : lineSpacing + secondHeight);
         var top = Math.Clamp(style.PositionY, 150, 1770) - totalHeight / 2;
         AddHookLine(canvas, first, top, style, isFirstLine: true);
-        if (second is not null)
-            AddHookLine(canvas, second.Value, top + first.Layout.Height + lineSpacing, style, isFirstLine: false);
+        var secondTop = top + first.Layout.Height + lineSpacing;
+        foreach (var second in secondLines)
+        {
+            AddHookLine(canvas, second, secondTop, style, isFirstLine: false);
+            secondTop += second.Layout.Height + lineSpacing;
+        }
 
         canvas.Measure(new WpfSize(1080, 1920));
         canvas.Arrange(new Rect(0, 0, 1080, 1920));
@@ -87,6 +107,34 @@ public static class ThumbnailComposer
         return (layout, layout.BuildGeometry(new WpfPoint(0, 0)), new SolidColorBrush(color));
     }
 
+    private static List<(FormattedText Layout, Geometry Geometry, WpfBrush Fill)> WrapHookLine(
+        string text, Typeface typeface, double size, WpfColor color)
+    {
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var result = new List<(FormattedText Layout, Geometry Geometry, WpfBrush Fill)>();
+        var current = new StringBuilder();
+        foreach (var word in words)
+        {
+            var candidate = current.Length == 0 ? word : current + " " + word;
+            var measured = MakeHookText(candidate, typeface, size, color);
+            if (current.Length > 0 && measured.Geometry.Bounds.Width > 960)
+            {
+                result.Add(MakeHookText(current.ToString(), typeface, size, color));
+                current.Clear();
+                current.Append(word);
+            }
+            else
+            {
+                if (current.Length > 0) current.Append(' ');
+                current.Append(word);
+            }
+        }
+
+        if (current.Length > 0)
+            result.Add(MakeHookText(current.ToString(), typeface, size, color));
+        return result;
+    }
+
     private static void AddHookLine(
         Canvas canvas, (FormattedText Layout, Geometry Geometry, WpfBrush Fill) text,
         double top, ThumbnailHookStyle style, bool isFirstLine)
@@ -100,7 +148,8 @@ public static class ThumbnailComposer
         {
             const double paddingX = 28;
             const double paddingY = 14;
-            var badgeWidth = Math.Min(1024, text.Layout.WidthIncludingTrailingWhitespace + paddingX * 2);
+            // Measure actual glyph bounds so the badge stays centered under the visible text.
+            var badgeWidth = Math.Min(1024, bounds.Width + paddingX * 2);
             var badgeHeight = text.Layout.Height + paddingY * 2;
             var radius = style.BadgeShape.ToLowerInvariant() switch
             {
@@ -246,12 +295,12 @@ public static class ThumbnailComposer
         string vFilter;
         if (preserveFullFrame)
         {
-            vFilter = "[0:v]split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920[base]";
+            vFilter = "[0:v]fps=30,split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920[base]";
         }
         else
         {
             var x = string.IsNullOrWhiteSpace(cropExpression) ? "(in_w-out_w)/2" : cropExpression;
-            vFilter = $"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0,scale=1080:1920[base]";
+            vFilter = $"[0:v]fps=30,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0,scale=1080:1920[base]";
         }
 
         var duration = openingDurationSeconds > 0 ? openingDurationSeconds : 2.0;
@@ -281,7 +330,7 @@ public static class ThumbnailComposer
         }
 
         args.AddRange([
-            "-c:v", "h264_amf", "-quality", "speed", "-b:v", "8M", "-pix_fmt", "yuv420p",
+            "-c:v", "h264_amf", "-quality", "speed", "-b:v", "8M", "-pix_fmt", "yuv420p", "-r", "30",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
             "-t", duration.ToString("0.###", Inv),
             outputOpeningMp4
@@ -293,7 +342,7 @@ public static class ThumbnailComposer
             if (File.Exists(outputOpeningMp4)) File.Delete(outputOpeningMp4);
             var codecIndex = args.IndexOf("h264_amf");
             args[codecIndex] = "libx264";
-            args.RemoveRange(codecIndex + 1, 3);
+            args.RemoveRange(codecIndex + 1, 4);
             args.InsertRange(codecIndex + 1, ["-preset", "veryfast", "-crf", "20"]);
             res = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
         }

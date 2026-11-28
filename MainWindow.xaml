@@ -189,18 +189,18 @@
           <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
           <Viewbox Grid.Row="0" Stretch="Uniform" StretchDirection="DownOnly" Margin="2">
             <Border BorderBrush="#53565A" BorderThickness="1" Background="#15171A">
-              <Canvas x:Name="PreviewCanvas" Width="270" Height="480" ClipToBounds="True">
-                <Image x:Name="PreviewBackdrop" Width="270" Height="480" Stretch="UniformToFill" />
-                <Border x:Name="PreviewPlaceholder" Width="270" Height="480" Background="#15171A">
+              <Canvas x:Name="PreviewCanvas" Width="1080" Height="1920" ClipToBounds="True">
+                <Image x:Name="PreviewBackdrop" Width="1080" Height="1920" Stretch="UniformToFill" />
+                <Border x:Name="PreviewPlaceholder" Width="1080" Height="1920" Background="#15171A">
                   <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="25">
                     <TextBlock Text="PREVIEW 9:16" Foreground="#AEB4BC" FontFamily="Consolas" FontSize="17" FontWeight="Bold" TextAlignment="Center" />
                     <TextBlock x:Name="PreviewPlaceholderStatusText" Text="Import a Gemini manifest to preview the selected clip." Foreground="#C1C7CE" FontFamily="Consolas" FontSize="11" TextAlignment="Center" TextWrapping="Wrap" Margin="0,12,0,0" />
                   </StackPanel>
                 </Border>
-                <Image x:Name="PreviewFullFrame" Width="270" Height="480" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False" />
-                <Image x:Name="PreviewFrame" Width="270" Height="480" Stretch="Fill" IsHitTestVisible="False" />
-                <Image x:Name="PreviewThumbnailImage" Width="270" Height="480" Stretch="Fill" Visibility="Collapsed" IsHitTestVisible="False" />
-                <local:CaptionPreviewElement x:Name="PreviewCaption" Canvas.Left="20" Width="230" Height="480" IsHitTestVisible="False" />
+                <Image x:Name="PreviewFullFrame" Width="1080" Height="1920" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False" />
+                <Image x:Name="PreviewFrame" Width="1080" Height="1920" Stretch="Fill" IsHitTestVisible="False" />
+                <Image x:Name="PreviewThumbnailImage" Width="1080" Height="1920" Stretch="Fill" Visibility="Collapsed" IsHitTestVisible="False" />
+                <local:CaptionPreviewElement x:Name="PreviewCaption" Canvas.Left="80" Width="920" Height="1920" IsHitTestVisible="False" />
               </Canvas>
             </Border>
           </Viewbox>
@@ -268,7 +268,7 @@
               <TextBlock Text="SIZE" FontWeight="Bold" VerticalAlignment="Center" />
               <TextBlock x:Name="FontSizeLabel" Text="100 px" HorizontalAlignment="Right" />
             </DockPanel>
-            <Slider x:Name="FontSizeSlider" Minimum="80" Maximum="120" Value="100" TickFrequency="10" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
+            <Slider x:Name="FontSizeSlider" Minimum="80" Maximum="120" Value="100" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
             <TextBlock Text="TEXT COLOR" FontWeight="Bold" Margin="0,7,0,3" />
             <ComboBox x:Name="TextColorBox" SelectionChanged="ColorChoice_Changed" SelectedIndex="0">
               <ComboBoxItem Content="White" Tag="White" /><ComboBoxItem Content="Yellow" Tag="Yellow" /><ComboBoxItem Content="Pink" Tag="Pink" /><ComboBoxItem Content="Red" Tag="Red" /><ComboBoxItem Content="Custom HEX" Tag="custom" />
@@ -300,12 +300,12 @@
               <TextBlock Text="LINE SPACING" FontWeight="Bold" VerticalAlignment="Center" />
               <TextBlock x:Name="LineSpacingLabel" Text="10 px" HorizontalAlignment="Right" />
             </DockPanel>
-            <Slider x:Name="LineSpacingSlider" Minimum="0" Maximum="60" Value="10" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" ToolTip="Additional space between subtitle lines in output pixels." />
+            <Slider x:Name="LineSpacingSlider" Minimum="0" Maximum="60" Value="10" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" ToolTip="Additional space between subtitle lines in output pixels." />
             <DockPanel Margin="0,9,0,0">
               <TextBlock Text="VERTICAL POSITION" FontWeight="Bold" VerticalAlignment="Center" />
               <TextBlock x:Name="PositionYLabel" Text="1420 / 1920 px" HorizontalAlignment="Right" />
             </DockPanel>
-            <Slider x:Name="PositionYSlider" Minimum="300" Maximum="1780" Value="1420" TickFrequency="40" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
+            <Slider x:Name="PositionYSlider" Minimum="300" Maximum="1780" Value="1420" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="StyleControl_Changed" />
             </StackPanel>
 
             <Separator Margin="0,11,0,8" />
@@ -338,7 +338,7 @@
                       <TextBlock Text="FONT SIZE" FontWeight="Bold" VerticalAlignment="Center" />
                       <TextBlock x:Name="ThumbnailFontSizeLabel" Text="128 px" HorizontalAlignment="Right" />
                     </DockPanel>
-                    <Slider x:Name="ThumbnailFontSizeSlider" Minimum="60" Maximum="180" Value="128" TickFrequency="4" ValueChanged="ThumbnailStyle_Changed" />
+                    <Slider x:Name="ThumbnailFontSizeSlider" Minimum="60" Maximum="180" Value="128" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ThumbnailStyle_Changed" />
                     <TextBlock Text="FIRST LINE COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,5,0,2" />
                     <TextBox x:Name="ThumbnailFirstLineColorBox" Text="#FFFFFF" TextChanged="ThumbnailStyle_Changed" />
                     <TextBlock Text="SECOND LINE COLOR  (#RRGGBB)" FontWeight="Bold" Margin="0,5,0,2" />
@@ -366,7 +366,7 @@
                       <TextBlock Text="SHADOW STRENGTH" FontWeight="Bold" VerticalAlignment="Center" />
                       <TextBlock x:Name="ThumbnailShadowOpacityLabel" Text="80%" HorizontalAlignment="Right" />
                     </DockPanel>
-                    <Slider x:Name="ThumbnailShadowOpacitySlider" Minimum="0" Maximum="100" Value="80" TickFrequency="5" ValueChanged="ThumbnailStyle_Changed" />
+                    <Slider x:Name="ThumbnailShadowOpacitySlider" Minimum="0" Maximum="100" Value="80" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ThumbnailStyle_Changed" />
                     <DockPanel Margin="0,3,0,2">
                       <TextBlock Text="SHADOW BLUR" FontWeight="Bold" VerticalAlignment="Center" />
                       <TextBlock x:Name="ThumbnailShadowBlurLabel" Text="7 px" HorizontalAlignment="Right" />
@@ -381,12 +381,12 @@
                       <TextBlock Text="LINE SPACING" FontWeight="Bold" VerticalAlignment="Center" />
                       <TextBlock x:Name="ThumbnailLineSpacingLabel" Text="8 px" HorizontalAlignment="Right" />
                     </DockPanel>
-                    <Slider x:Name="ThumbnailLineSpacingSlider" Minimum="0" Maximum="80" Value="8" TickFrequency="2" ValueChanged="ThumbnailStyle_Changed" />
+                    <Slider x:Name="ThumbnailLineSpacingSlider" Minimum="0" Maximum="80" Value="8" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ThumbnailStyle_Changed" />
                     <DockPanel Margin="0,7,0,2">
                       <TextBlock Text="VERTICAL POSITION" FontWeight="Bold" VerticalAlignment="Center" />
                       <TextBlock x:Name="ThumbnailPositionLabel" Text="565 / 1920 px" HorizontalAlignment="Right" />
                     </DockPanel>
-                    <Slider x:Name="ThumbnailPositionSlider" Minimum="250" Maximum="1300" Value="565" TickFrequency="10" ValueChanged="ThumbnailStyle_Changed" />
+                    <Slider x:Name="ThumbnailPositionSlider" Minimum="250" Maximum="1300" Value="565" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ThumbnailStyle_Changed" />
                   </StackPanel>
                 </Expander>
                 <DockPanel Margin="0,8,0,2">
@@ -445,7 +445,7 @@
                   <TextBlock Text="WIB publishing slots" FontWeight="Bold" />
                   <TextBlock x:Name="WeekdaySlotsSummaryText" Text="Weekdays  6:30 AM · 9:30 AM · 11:45 AM · 1:30 PM · 4:00 PM · 6:00 PM · 7:30 PM · 9:15 PM" TextWrapping="Wrap" Margin="0,3,0,0" />
                   <TextBlock x:Name="WeekendSlotsSummaryText" Text="Weekends  8:00 AM · 10:00 AM · 12:00 PM · 2:00 PM · 4:00 PM · 6:15 PM · 8:00 PM · 10:00 PM" TextWrapping="Wrap" Margin="0,2,0,0" />
-                  <TextBlock Text="Auto-Schedule fills the next available slot. Clipper uploads each video as Private and sends its publish time to YouTube." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
+                  <TextBlock Text="Day/slot labels use the matching WIB time by slot number. Repeated clips in one category are scheduled on following weeks. Unlabeled clips keep the standard queue order." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
                   <TextBlock x:Name="YouTubeConnectionStatusText" Text="Not connected. Connect a YouTube channel to upload scheduled videos." Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,5,12,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -504,6 +504,7 @@
                 <DataGridCheckBoxColumn Header="UPLOAD" Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="68" />
                 <DataGridTextColumn Header="NO." Binding="{Binding QueueNumber}" Width="48" />
                 <DataGridTextColumn Header="VIDEO" Binding="{Binding FileName}" Width="1.2*" IsReadOnly="True" />
+                <DataGridTextColumn Header="DAY / SLOT" Binding="{Binding CategoryDisplay}" Width="0.9*" IsReadOnly="True" />
                 <DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="1.5*" IsReadOnly="True" />
                 <DataGridTextColumn Header="PUBLISH TIME (WIB)" Binding="{Binding PublishAtDisplay}" Width="1.2*" IsReadOnly="True" />
                 <DataGridTextColumn Header="LOCAL FILE" Binding="{Binding FileState}" Width="0.9*" IsReadOnly="True" />

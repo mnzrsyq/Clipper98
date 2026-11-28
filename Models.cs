@@ -24,6 +24,10 @@ public sealed class ClipCandidate
 {
     public bool IsSelected { get; set; } = true;
     public string Name { get; init; } = string.Empty;
+    public string SourceId { get; init; } = string.Empty;
+    public string SourceUrl { get; init; } = string.Empty;
+    public string SourceTitle { get; init; } = string.Empty;
+    public double? SourceDurationSeconds { get; init; }
     public double Start { get; set; }
     public double End { get; set; }
     public string Hook { get; init; } = string.Empty;
@@ -32,6 +36,8 @@ public sealed class ClipCandidate
     public string Hashtags { get; init; } = string.Empty;
     public string YouTubeTitle { get; set; } = string.Empty;
     public string YouTubeDescription { get; set; } = string.Empty;
+    public string PublishDay { get; set; } = string.Empty;
+    public int PublishSlot { get; set; }
     public double? HeroFrameSeconds { get; set; }
     public string ThumbnailHook { get; set; } = string.Empty;
     public bool EnableOpeningMotion { get; set; }
@@ -59,7 +65,9 @@ public sealed class ClipperJobManifest
     [JsonPropertyName("schema_version")] public int SchemaVersion { get; set; } = 1;
     [JsonPropertyName("mode")] public string Mode { get; set; } = "short_clips";
     [JsonPropertyName("source")] public ClipperJobSource Source { get; set; } = new();
+    [JsonPropertyName("sources")] public List<ClipperJobSource> Sources { get; set; } = [];
     [JsonPropertyName("requested_candidate_count")] public int RequestedCandidateCount { get; set; } = 7;
+    [JsonPropertyName("requested_slot_count")] public int? RequestedSlotCount { get; set; }
     [JsonPropertyName("target_duration_seconds")] public int TargetDurationSeconds { get; set; }
     [JsonPropertyName("condensed_summary")] public string CondensedSummary { get; set; } = string.Empty;
     [JsonPropertyName("youtube_title")] public string YouTubeTitle { get; set; } = string.Empty;
@@ -75,6 +83,7 @@ public sealed class ClipperJobManifest
 
 public sealed class ClipperJobSource
 {
+    [JsonPropertyName("source_id")] public string SourceId { get; set; } = string.Empty;
     [JsonPropertyName("platform")] public string Platform { get; set; } = "youtube";
     [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
     [JsonPropertyName("video_id")] public string VideoId { get; set; } = string.Empty;
@@ -92,6 +101,7 @@ public sealed class ClipperJobConstraints
 public sealed class ClipperJobClip
 {
     [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("source_id")] public string SourceId { get; set; } = string.Empty;
     [JsonPropertyName("start_seconds")] public double StartSeconds { get; set; }
     [JsonPropertyName("end_seconds")] public double EndSeconds { get; set; }
     [JsonPropertyName("hero_frame_seconds")] public double? HeroFrameSeconds { get; set; }
@@ -105,6 +115,8 @@ public sealed class ClipperJobClip
     [JsonPropertyName("hashtags")] public List<string> Hashtags { get; set; } = [];
     [JsonPropertyName("youtube_title")] public string YouTubeTitle { get; set; } = string.Empty;
     [JsonPropertyName("youtube_description")] public string YouTubeDescription { get; set; } = string.Empty;
+    [JsonPropertyName("day")] public string Day { get; set; } = string.Empty;
+    [JsonPropertyName("slot")] public int Slot { get; set; }
 }
 
 public sealed class RenderJobRequest
@@ -113,6 +125,8 @@ public sealed class RenderJobRequest
     [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
     [JsonPropertyName("youtube_title")] public string YouTubeTitle { get; set; } = string.Empty;
     [JsonPropertyName("youtube_description")] public string YouTubeDescription { get; set; } = string.Empty;
+    [JsonPropertyName("day")] public string Day { get; set; } = string.Empty;
+    [JsonPropertyName("slot")] public int Slot { get; set; }
     [JsonPropertyName("clip")] public ClipperJobClip Clip { get; set; } = new();
     [JsonPropertyName("segments")] public List<CondensedSegment> Segments { get; set; } = [];
     [JsonPropertyName("hero_frame_seconds")] public double? HeroFrameSeconds { get; set; }
@@ -231,6 +245,13 @@ public sealed class YouTubeUploadItem : INotifyPropertyChanged
     public string OriginalTitle { get; set; } = string.Empty;
     public string OriginalDescription { get; set; } = string.Empty;
     public bool HasEmbeddedMetadata { get; set; }
+    public string PublishDay { get; set; } = string.Empty;
+    public int PublishSlot { get; set; }
+
+    [JsonIgnore]
+    public string CategoryDisplay => PublishSlot > 0 && !string.IsNullOrWhiteSpace(PublishDay)
+        ? $"{PublishDay}_Slot_{PublishSlot}"
+        : string.Empty;
 
     public bool IsSelected
     {

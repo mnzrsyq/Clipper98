@@ -4,6 +4,9 @@ public static class CaptionLayout
 {
     public const double SafeWidth = 920;
 
+    public const double HighlightBoxExtraWidth = 3;
+    public const double HighlightBoxExtraHeight = 2;
+
     public static int CharactersPerLine(int fontSize, double letterSpacing) =>
         Math.Clamp((int)(SafeWidth / Math.Max(1, fontSize * 0.62 + letterSpacing)), 10, 40);
 

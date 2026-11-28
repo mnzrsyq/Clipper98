@@ -64,6 +64,7 @@ public static class ClipperJobScript
             manifest.ClipsData = clips.Select(clip => new ClipperJobClip
             {
                 Id = clip.Name,
+                SourceId = clip.SourceId,
                 StartSeconds = clip.Start,
                 EndSeconds = clip.End,
                 HeroFrameSeconds = clip.HeroFrameSeconds,
@@ -76,7 +77,9 @@ public static class ClipperJobScript
                 Caption = clip.Caption,
                 Hashtags = clip.Hashtags.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
                 YouTubeTitle = clip.YouTubeTitle,
-                YouTubeDescription = clip.YouTubeDescription
+                YouTubeDescription = clip.YouTubeDescription,
+                Day = clip.PublishDay,
+                Slot = clip.PublishSlot
             }).ToList();
         }
 
@@ -94,12 +97,32 @@ public static class ClipperJobScript
         var manifest = JsonSerializer.Deserialize<ClipperJobManifest>(root.GetRawText())
             ?? throw new JsonException("The manifest is empty.");
         if (manifest.SchemaVersion != 1) throw new InvalidOperationException($"Manifest version {manifest.SchemaVersion} is not supported.");
-        if (manifest.Mode is null || manifest.KeepSegments is null || manifest.ClipsData is null)
+        if (manifest.RequestedSlotCount is < 1 or > 20)
+            throw new InvalidOperationException("requested_slot_count must be between 1 and 20 when provided.");
+        if (manifest.Mode is null || manifest.KeepSegments is null || manifest.ClipsData is null || manifest.Sources is null)
             throw new InvalidOperationException("The manifest mode or segment list is invalid.");
-        if (!string.Equals(manifest.Source.Platform, "youtube", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The manifest source must be a YouTube video.");
-        if (!IsYouTubeUrl(manifest.Source.Url))
-            throw new InvalidOperationException("The YouTube URL in the manifest is invalid.");
+        var isMultiSource = manifest.Mode.Equals("multi_source_daily", StringComparison.OrdinalIgnoreCase);
+        if (isMultiSource)
+        {
+            if (manifest.Sources.Count is < 1 or > 20)
+                throw new InvalidOperationException("A multi-source manifest must contain 1 to 20 video sources.");
+            var sourceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var source in manifest.Sources)
+            {
+                if (string.IsNullOrWhiteSpace(source.SourceId) || !sourceIds.Add(source.SourceId)
+                    || !string.Equals(source.Platform, "youtube", StringComparison.OrdinalIgnoreCase)
+                    || !IsYouTubeUrl(source.Url))
+                    throw new InvalidOperationException("Each multi-source entry needs a unique source_id and a valid YouTube URL.");
+            }
+            manifest.Source = manifest.Sources[0];
+        }
+        else
+        {
+            if (!string.Equals(manifest.Source.Platform, "youtube", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The manifest source must be a YouTube video.");
+            if (!IsYouTubeUrl(manifest.Source.Url))
+                throw new InvalidOperationException("The YouTube URL in the manifest is invalid.");
+        }
         if (manifest.Constraints.MaxHeight is < 1 or > 1080)
             throw new InvalidOperationException("Manifest resolution cannot exceed 1080p.");
         if (string.Equals(manifest.Mode, "condense", StringComparison.OrdinalIgnoreCase))
@@ -111,12 +134,23 @@ public static class ClipperJobScript
         }
         else
         {
-            if (!manifest.Mode.Equals("short_clips", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("The manifest mode must be short_clips or condense.");
+            if (!manifest.Mode.Equals("short_clips", StringComparison.OrdinalIgnoreCase) && !isMultiSource)
+                throw new InvalidOperationException("The manifest mode must be short_clips, multi_source_daily, or condense.");
             if (manifest.RequestedCandidateCount is < 1 or > 20)
                 throw new InvalidOperationException("The manifest must request between 1 and 20 candidates.");
             if (manifest.ClipsData.Count is < 1 or > 20)
                 throw new InvalidOperationException("The manifest must contain 1 to 20 candidates.");
+            foreach (var item in manifest.ClipsData)
+            {
+                var hasDay = !string.IsNullOrWhiteSpace(item.Day);
+                var hasSlot = item.Slot > 0;
+                if (hasDay != hasSlot)
+                    throw new InvalidOperationException($"Candidate {item.Id} must include both day and slot, or leave both out for the standard clip-only workflow.");
+                if (hasDay && !TryNormalizePublishDay(item.Day, out _))
+                    throw new InvalidOperationException($"Candidate {item.Id} has an invalid day. Use Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, or Minggu.");
+                if (hasSlot && (item.Slot > 20 || (manifest.RequestedSlotCount.HasValue && item.Slot > manifest.RequestedSlotCount.Value)))
+                    throw new InvalidOperationException($"Candidate {item.Id} uses a slot outside requested_slot_count.");
+            }
         }
         return manifest;
     }
@@ -173,18 +207,32 @@ public static class ClipperJobScript
 
         var clips = new List<ClipCandidate>();
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var isMultiSource = manifest.Mode.Equals("multi_source_daily", StringComparison.OrdinalIgnoreCase);
+        var sourcesById = isMultiSource
+            ? manifest.Sources.ToDictionary(source => source.SourceId, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, ClipperJobSource>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in manifest.ClipsData)
         {
             if (!Regex.IsMatch(item.Id, @"^(?:clip|custom)_\d{2}$", RegexOptions.IgnoreCase) || !ids.Add(item.Id))
                 throw new InvalidOperationException("Candidate IDs must be unique and follow the clip_01 or custom_01 format.");
+            var source = manifest.Source;
+            if (isMultiSource)
+            {
+                if (string.IsNullOrWhiteSpace(item.SourceId) || !sourcesById.TryGetValue(item.SourceId, out source!))
+                    throw new InvalidOperationException($"Candidate {item.Id} references an unknown source_id.");
+            }
             if (!double.IsFinite(item.StartSeconds) || !double.IsFinite(item.EndSeconds)
                 || item.StartSeconds < 0 || item.EndSeconds <= item.StartSeconds
-                || (manifest.Source.DurationSeconds is > 0 and var duration && item.EndSeconds > duration))
+                || (source.DurationSeconds is > 0 and var duration && item.EndSeconds > duration))
                 throw new InvalidOperationException($"Candidate {item.Id} has invalid timestamps or falls outside the video duration.");
 
             clips.Add(new ClipCandidate
             {
                 Name = item.Id,
+                SourceId = item.SourceId,
+                SourceUrl = source.Url,
+                SourceTitle = source.Title,
+                SourceDurationSeconds = source.DurationSeconds,
                 Start = item.StartSeconds,
                 End = item.EndSeconds,
                 HeroFrameSeconds = item.HeroFrameSeconds ?? (item.StartSeconds + (item.EndSeconds - item.StartSeconds) / 2.0),
@@ -197,16 +245,30 @@ public static class ClipperJobScript
                 Caption = item.Caption,
                 Hashtags = string.Join(" ", item.Hashtags),
                 YouTubeTitle = item.YouTubeTitle,
-                YouTubeDescription = item.YouTubeDescription
+                YouTubeDescription = item.YouTubeDescription,
+                PublishDay = TryNormalizePublishDay(item.Day, out var day) ? day : string.Empty,
+                PublishSlot = item.Slot
             });
         }
 
         for (var i = 0; i < clips.Count; i++)
             for (var j = i + 1; j < clips.Count; j++)
-                if (clips[i].Start < clips[j].End && clips[j].Start < clips[i].End)
+                if (string.Equals(clips[i].SourceId, clips[j].SourceId, StringComparison.OrdinalIgnoreCase)
+                    && clips[i].Start < clips[j].End && clips[j].Start < clips[i].End)
                     throw new InvalidOperationException($"Candidates {clips[i].Name} and {clips[j].Name} overlap.");
 
         return clips;
+    }
+
+    private static bool TryNormalizePublishDay(string? value, out string normalized)
+    {
+        normalized = value?.Trim().ToLowerInvariant() switch
+        {
+            "senin" => "Senin", "selasa" => "Selasa", "rabu" => "Rabu", "kamis" => "Kamis",
+            "jumat" or "jum'at" => "Jumat", "sabtu" => "Sabtu", "minggu" => "Minggu",
+            _ => string.Empty
+        };
+        return normalized.Length > 0;
     }
 
     private static string NormalizePythonData(string source)

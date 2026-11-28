@@ -117,6 +117,8 @@ Clipper98 tidak memanggil Gemini secara langsung dan tidak memerlukan API key Ge
 
 Hubungkan channel melalui **CONNECT YOUTUBE**, pilih video di antrean, lalu klik **AUTO-SCHEDULE** atau atur waktu WIB per video. **UPLOAD SCHEDULED VIDEOS** mengirim file sebagai Private beserta waktu publish ke YouTube. Auto-Schedule memeriksa antrean lokal saja; antrean dari PC lain atau YouTube Studio tidak ikut dihitung.
 
+Manifest Clipper-v3 dapat memberi label `day` dan `slot` untuk setiap klip. Saat Auto-Schedule, klip dijadwalkan ke hari dan jam slot yang sesuai; klip lain dengan kategori sama masuk ke minggu berikutnya. Jam dan jumlah slot dapat diubah manual di **CUSTOMIZE SLOTS**. Jika jumlah slot pada manifest melebihi jam yang tersedia, Auto-Schedule meminta pengguna menambahkan jam terlebih dahulu. Field kategori ini opsional, jadi manifest dari skill Clipper biasa tetap bisa dipakai untuk render saja.
+
 ### Mengapa ada unduhan besar saat pertama kali memakai Whisper?
 
 Model Whisper Large-v3-Turbo berukuran sekitar 1,5 GiB. Model hanya diunduh jika belum tersedia dan diperlukan untuk transkripsi.

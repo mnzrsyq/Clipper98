@@ -55,6 +55,8 @@ public partial class App : System.Windows.Application
                     Reason = request.Clip.Reason,
                     Caption = request.Clip.Caption,
                     Hashtags = string.Join(" ", request.Clip.Hashtags),
+                    PublishDay = request.Day,
+                    PublishSlot = request.Slot,
                     PreserveFullFrame = request.PreserveFullFrame,
                     KeptSegments = request.Segments
                 },

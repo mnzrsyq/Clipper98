@@ -5,7 +5,7 @@ namespace Clipper98;
 /// <summary>Render either 9:16 or source aspect ratio, with optional framing, PNG frame, and captions.</summary>
 public sealed class ClipRenderer
 {
-    private const string Preset = "veryfast";
+    private const string Preset = "ultrafast";
     private const int Crf = 20;
 
     public async Task RenderAsync(
@@ -13,9 +13,11 @@ public sealed class ClipRenderer
         string? cropExpression, bool preserveFullFrame, IReadOnlyList<SmartCropSegment>? fullFrameSegments,
         string? framePngPath, string? fontFilePath, bool preserveSourceAspectRatio,
         bool useFourByFiveContentFrame, IReadOnlyList<NarrationTrack> narrationTracks,
-        TtsOptions ttsOptions, CancellationToken ct, string metadataTitle = "", string metadataDescription = "")
+        TtsOptions ttsOptions, CancellationToken ct, string metadataTitle = "", string metadataDescription = "",
+        IProgress<JobProgress>? progress = null, string metadataDay = "", int metadataSlot = 0)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
+        var renderThreads = Math.Max(1, Environment.ProcessorCount);
         var hasFrame = !preserveSourceAspectRatio && !string.IsNullOrWhiteSpace(framePngPath);
         var hasSubtitles = !string.IsNullOrWhiteSpace(assFile);
         var hasNarration = narrationTracks.Count > 0;
@@ -45,17 +47,18 @@ public sealed class ClipRenderer
         }
 
         var graph = new List<string>();
+        graph.Add("[0:v]fps=30[rate30]");
         var baseLabel = "base";
         if (preserveSourceAspectRatio)
         {
-            graph.Add("[0:v]null[base]");
+            graph.Add("[rate30]null[base]");
         }
         else if (useFourByFiveContentFrame)
         {
             var x = string.IsNullOrWhiteSpace(cropExpression)
                 ? "(in_w-out_w)/2"
                 : cropExpression;
-            graph.Add("[0:v]split=3[bgsrc][cropin][fitin]");
+            graph.Add("[rate30]split=3[bgsrc][cropin][fitin]");
             graph.Add("[bgsrc]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[blurredbg]");
             graph.Add($"[cropin]scale=1080:1350:force_original_aspect_ratio=increase,crop=1080:1350:x='{x}':y='(ih-oh)/2'[content45]");
             graph.Add("[blurredbg][content45]overlay=0:(H-h)/2[base]");
@@ -72,7 +75,7 @@ public sealed class ClipRenderer
         }
         else if (preserveFullFrame)
         {
-            graph.Add("[0:v]split=2[widebg][widefg]");
+            graph.Add("[rate30]split=2[widebg][widefg]");
             graph.Add("[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[bg]");
             graph.Add("[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fg]");
             graph.Add("[bg][fg]overlay=(W-w)/2:(H-h)/2[base]");
@@ -86,13 +89,13 @@ public sealed class ClipRenderer
             if (intervals.Count == 0)
             {
                 // FFmpeg crop evaluates x/y per frame; this bundled build has no `eval` option.
-                graph.Add($"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0[base]");
+                graph.Add($"[rate30]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0[base]");
             }
             else
             {
                 var enable = string.Join("+", intervals.Select(segment =>
                     $"between(t,{F(segment.Start)},{F(segment.End)})"));
-                graph.Add("[0:v]split=3[cropin][widebg][widefg]");
+                graph.Add("[rate30]split=3[cropin][widebg][widefg]");
                 graph.Add($"[cropin]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:x='{x}':y=0[cropbase]");
                 graph.Add("[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:10[blurred]");
                 graph.Add("[widefg]scale=1080:1920:force_original_aspect_ratio=decrease[fit]");
@@ -134,10 +137,14 @@ public sealed class ClipRenderer
         }
 
         var filterGraph = string.Join(";", graph);
-        var args = new List<string> { "-y", "-i", source };
+        var args = new List<string>
+        {
+            "-y", "-threads", renderThreads.ToString(CultureInfo.InvariantCulture), "-i", source
+        };
         if (hasFrame) args.AddRange(["-loop", "1", "-i", framePngPath!]);
         foreach (var track in narrationTracks) args.AddRange(["-i", track.FilePath]);
         args.AddRange([
+            "-filter_complex_threads", renderThreads.ToString(CultureInfo.InvariantCulture),
             "-filter_complex", filterGraph,
             "-map", "[vout]"
         ]);
@@ -145,21 +152,39 @@ public sealed class ClipRenderer
         else args.AddRange(["-map", "0:a?"]);
         args.AddRange([
             "-shortest", "-metadata", $"title={metadataTitle}", "-metadata", $"description={metadataDescription}",
-            "-metadata", $"comment={VideoMetadataCodec.EncodeComment(metadataTitle, metadataDescription)}",
-            "-c:v", "libx264", "-preset", Preset, "-crf", Crf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p",
+            "-metadata", $"comment={VideoMetadataCodec.EncodeComment(metadataTitle, metadataDescription, metadataDay, metadataSlot)}",
+            "-c:v", "libx264", "-preset", Preset, "-crf", Crf.ToString(CultureInfo.InvariantCulture),
+            "-threads", renderThreads.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p", "-r", "30",
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output
         ]);
+
+        void ReportFfmpegProgress(string encoder, string line)
+        {
+            if (line.Contains("frame=", StringComparison.OrdinalIgnoreCase))
+            {
+                var summary = string.Join(" ", line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+                progress?.Report(JobProgress.Stage($"Render {encoder} 30 fps: {summary}"));
+            }
+        }
 
         var amfArgs = args.ToList();
         var codecIndex = amfArgs.IndexOf("libx264");
         amfArgs[codecIndex] = "h264_amf";
-        amfArgs.RemoveRange(codecIndex + 1, 3);
+        amfArgs.RemoveRange(codecIndex + 1, 6);
         amfArgs.InsertRange(codecIndex + 1, ["-quality", "speed", "-b:v", "8M"]);
-        var result = await ProcessRunner.RunAsync(ffmpeg, amfArgs, workDir, null, ct);
+
+        progress?.Report(JobProgress.Stage("Mencoba render 30 fps dengan encoder GPU AMD..."));
+        var result = await ProcessRunner.RunAsync(ffmpeg, amfArgs, workDir,
+            line => ReportFfmpegProgress("GPU AMD", line), ct);
         if (result.ExitCode != 0)
         {
             if (File.Exists(output)) File.Delete(output);
-            result = await ProcessRunner.RunAsync(ffmpeg, args, workDir, null, ct);
+            var reason = result.Tail(2);
+            progress?.Report(JobProgress.Stage(string.IsNullOrWhiteSpace(reason)
+                ? $"Encoder GPU AMD gagal; beralih ke CPU ({renderThreads} threads)..."
+                : $"Encoder GPU AMD gagal ({reason}); beralih ke CPU ({renderThreads} threads)..."));
+            result = await ProcessRunner.RunAsync(ffmpeg, args, workDir,
+                line => ReportFfmpegProgress($"CPU {renderThreads} threads", line), ct);
         }
         if (result.ExitCode != 0) throw new InvalidOperationException("Render video gagal. " + result.Tail());
     }

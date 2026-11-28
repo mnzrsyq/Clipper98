@@ -3,19 +3,19 @@ using System.Text.Json;
 
 namespace Clipper98;
 
-public sealed record VideoMetadata(string Title, string Description, bool Found);
+public sealed record VideoMetadata(string Title, string Description, bool Found, string Day = "", int Slot = 0);
 
 public static class VideoMetadataCodec
 {
     private const string CommentPrefix = "clipper98_metadata_v1:";
 
-    public static string EncodeComment(string title, string description)
+    public static string EncodeComment(string title, string description, string day = "", int slot = 0)
     {
-        var json = JsonSerializer.Serialize(new VideoMetadataPayload(title, description));
+        var json = JsonSerializer.Serialize(new VideoMetadataPayload(title, description, day, slot));
         return CommentPrefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
     }
 
-    public static async Task WriteAsync(string videoPath, string title, string description, string workDir, CancellationToken ct)
+    public static async Task WriteAsync(string videoPath, string title, string description, string workDir, CancellationToken ct, string day = "", int slot = 0)
     {
         var ffmpeg = ProcessRunner.RequireTool("ffmpeg");
         var tempPath = Path.Combine(workDir, "metadata-" + Guid.NewGuid().ToString("N") + ".mp4");
@@ -23,7 +23,7 @@ public static class VideoMetadataCodec
         [
             "-y", "-i", videoPath, "-map", "0", "-c", "copy",
             "-metadata", $"title={title}", "-metadata", $"description={description}",
-            "-metadata", $"comment={EncodeComment(title, description)}", "-movflags", "+faststart", tempPath
+            "-metadata", $"comment={EncodeComment(title, description, day, slot)}", "-movflags", "+faststart", tempPath
         ], workDir, null, ct);
         if (result.ExitCode != 0 || !File.Exists(tempPath))
         {
@@ -58,7 +58,9 @@ public static class VideoMetadataCodec
                 var payloadJson = Encoding.UTF8.GetString(Convert.FromBase64String(comment[CommentPrefix.Length..]));
                 var payload = JsonSerializer.Deserialize<VideoMetadataPayload>(payloadJson);
                 if (payload is not null)
-                    return new VideoMetadata(payload.Title, payload.Description, true);
+                    return new VideoMetadata(payload.Title ?? title, payload.Description ?? description,
+                        !string.IsNullOrWhiteSpace(payload.Title) || !string.IsNullOrWhiteSpace(payload.Description),
+                        payload.Day ?? string.Empty, payload.Slot);
             }
             catch (Exception ex) when (ex is FormatException or JsonException) { }
         }
@@ -77,5 +79,5 @@ public static class VideoMetadataCodec
         return builder.ToString();
     }
 
-    private sealed record VideoMetadataPayload(string Title, string Description);
+    private sealed record VideoMetadataPayload(string Title, string Description, string Day = "", int Slot = 0);
 }

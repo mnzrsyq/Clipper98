@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Windows.Media;
+using WpfBrushes = System.Windows.Media.Brushes;
+using WpfFlowDirection = System.Windows.FlowDirection;
 
 namespace Clipper98;
 
@@ -68,6 +71,7 @@ public static class CaptionWriter
         var fontName = style.FontName.Replace(",", " ").Trim();
         var spacing = style.LetterSpacing.ToString("0.##", CultureInfo.InvariantCulture);
         writer.WriteLine($"Style: Default,{fontName},{style.FontSize},{AssColor(style.TextColor)},&H00000000,&H00000000,&H00000000,{(style.FontBold ? -1 : 0)},{(style.FontItalic ? -1 : 0)},0,0,100,100,{spacing},0,1,{style.Outline},0,5,80,80,0,1");
+        writer.WriteLine($"Style: HighlightBox,{fontName},{style.FontSize},&HFFFFFFFF,&H00000000,{AssColor(style.HighlightColor)},&H00000000,{(style.FontBold ? -1 : 0)},{(style.FontItalic ? -1 : 0)},0,0,100,100,{spacing},0,3,1.5,0,5,80,80,0,1");
         writer.WriteLine("[Events]");
         writer.WriteLine("Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text");
         var maxCharsPerLine = CaptionLayout.CharactersPerLine(style.FontSize, style.LetterSpacing);
@@ -121,8 +125,10 @@ public static class CaptionWriter
             {
                 var start = wordStarts[word];
                 var end = VisibleEnd(word, nextWordStarts[word], start);
+                if (style.HighlightEnabled && style.HighlightMode.Equals("box", StringComparison.OrdinalIgnoreCase))
+                    WriteHighlightBox(writer, [word], word, positionY, start, end, style);
                 var text = FormatLine([word], style.HighlightEnabled ? word : null, style);
-                writer.WriteLine($"Dialogue: 0,{AssTime(start)},{AssTime(end)},Default,,0,0,0,,{{\\pos(540,{positionY})}}{text}");
+                writer.WriteLine($"Dialogue: 1,{AssTime(start)},{AssTime(end)},Default,,0,0,0,,{{\\pos(540,{positionY})}}{text}");
             }
             return;
         }
@@ -139,7 +145,7 @@ public static class CaptionWriter
                     var line = lines[lineIndex];
                     var text = FormatLine(line, null, style);
                     var rowY = CaptionLayout.LinePositionY(positionY, lineIndex, lines.Count, style.FontSize, style.LineSpacing);
-                    writer.WriteLine($"Dialogue: 0,{AssTime(wordStarts[groupWords[0]])},{AssTime(groupEnd)},Default,,0,0,0,,{{\\pos(540,{rowY})}}{text}");
+                    writer.WriteLine($"Dialogue: 1,{AssTime(wordStarts[groupWords[0]])},{AssTime(groupEnd)},Default,,0,0,0,,{{\\pos(540,{rowY})}}{text}");
                 }
                 continue;
             }
@@ -152,15 +158,56 @@ public static class CaptionWriter
                 for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                 {
                     var line = lines[lineIndex];
-                    var text = FormatLine(line, word, style);
                     var rowY = CaptionLayout.LinePositionY(positionY, lineIndex, lines.Count, style.FontSize, style.LineSpacing);
-                    writer.WriteLine($"Dialogue: 0,{AssTime(start)},{AssTime(end)},Default,,0,0,0,,{{\\pos(540,{rowY})}}{text}");
+                    if (style.HighlightMode.Equals("box", StringComparison.OrdinalIgnoreCase)
+                        && line.Any(lineWord => ReferenceEquals(lineWord, word)))
+                        WriteHighlightBox(writer, line, word, rowY, start, end, style);
+                    var text = FormatLine(line, word, style);
+                    writer.WriteLine($"Dialogue: 1,{AssTime(start)},{AssTime(end)},Default,,0,0,0,,{{\\pos(540,{rowY})}}{text}");
                 }
             }
         }
     }
 
     private sealed record CaptionBlock(List<List<SubtitleWord>> Lines, List<SubtitleWord> Words);
+
+    private static void WriteHighlightBox(StreamWriter writer, IReadOnlyList<SubtitleWord> line,
+        SubtitleWord activeWord, int centerY, double start, double end, CaptionStyle style)
+    {
+        var textWidths = line.Select(word => MeasureCaptionWord(word.Text, style)).ToList();
+        var wordIndex = -1;
+        for (var i = 0; i < line.Count; i++)
+            if (ReferenceEquals(line[i], activeWord)) { wordIndex = i; break; }
+        if (wordIndex < 0) return;
+
+        var spaceWidth = MeasureCaptionText(" ", style) + style.LetterSpacing;
+        var lineWidth = textWidths.Sum() + Math.Max(0, line.Count - 1) * spaceWidth;
+        var left = 540 - lineWidth / 2
+            + textWidths.Take(wordIndex).Sum()
+            + wordIndex * spaceWidth;
+        var centerX = left + textWidths[wordIndex] / 2;
+        var x = centerX.ToString("0.##", CultureInfo.InvariantCulture);
+        writer.WriteLine($"Dialogue: 0,{AssTime(start)},{AssTime(end)},HighlightBox,,0,0,0,,{{\\pos({x},{centerY})\\1a&HFF&}}{AssEscape(activeWord.Text)}");
+    }
+
+    private static double MeasureCaptionWord(string text, CaptionStyle style) =>
+        MeasureCaptionText(text, style) + Math.Max(0, text.Length - 1) * style.LetterSpacing;
+
+    private static double MeasureCaptionText(string text, CaptionStyle style)
+    {
+        var familyName = string.IsNullOrWhiteSpace(style.FontName) ? "Segoe UI" : style.FontName;
+        var family = SubtitleFonts.ResolvePreviewFamily(new SubtitleFontOption
+        {
+            FamilyName = familyName,
+            FilePath = style.FontFilePath
+        });
+        var typeface = new Typeface(family,
+            style.FontItalic ? System.Windows.FontStyles.Italic : System.Windows.FontStyles.Normal,
+            style.FontBold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal,
+            System.Windows.FontStretches.Normal);
+        return new FormattedText(text, CultureInfo.InvariantCulture, WpfFlowDirection.LeftToRight,
+            typeface, style.FontSize, WpfBrushes.White, 1.0).WidthIncludingTrailingWhitespace;
+    }
 
     private static string FormatLine(IReadOnlyList<SubtitleWord> line, SubtitleWord? highlightedWord, CaptionStyle style)
     {
@@ -175,8 +222,7 @@ public static class CaptionWriter
             {
                 if (style.HighlightMode.Equals("box", StringComparison.OrdinalIgnoreCase))
                 {
-                    var border = Math.Clamp(style.FontSize * 0.16, 8, 28).ToString("0.##", CultureInfo.InvariantCulture);
-                    result.Append($"{{\\c{AssColor(style.TextColor)}&\\bord{border}&\\3c{AssColor(style.HighlightColor)}&\\shad0&}}{escaped}{{\\rDefault}}");
+                    result.Append(escaped);
                 }
                 else
                 {

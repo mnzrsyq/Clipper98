@@ -313,6 +313,10 @@ public partial class MainWindow : Window
                 && WpfMessageBox.Show(this, loaded.Warning, "Manifest terpotong", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
+            var slotWarning = GetSlotCompatibilityWarning(loaded.Manifest, loaded.Clips);
+            if (slotWarning is not null)
+                WpfMessageBox.Show(this, slotWarning, "Publishing slots", MessageBoxButton.OK, MessageBoxImage.Warning);
+
             ClipList.ItemsSource = null;
             _clips.Clear();
             _scan = null;
@@ -322,8 +326,11 @@ public partial class MainWindow : Window
             _manifest = loaded.Manifest;
             _manifestPath = dialog.FileName;
             _clips.AddRange(loaded.Clips);
+            var uiMode = loaded.Manifest.Mode.Equals("multi_source_daily", StringComparison.OrdinalIgnoreCase)
+                ? "short_clips"
+                : loaded.Manifest.Mode;
             ProcessingModeBox.SelectedItem = ProcessingModeBox.Items.OfType<ComboBoxItem>()
-                .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), loaded.Manifest.Mode, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), uiMode, StringComparison.OrdinalIgnoreCase));
             _settingManifestMode = false;
             if (loaded.Manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase))
             {
@@ -349,7 +356,10 @@ public partial class MainWindow : Window
                 : $"STATUS: {_clips.Count} candidates loaded from Gemini.");
             ClipDetail.Text = loaded.Manifest.Mode.Equals("condense", StringComparison.OrdinalIgnoreCase)
                 ? BuildCondensedDetail(_clips[0])
-                : $"File: {Path.GetFileName(dialog.FileName)}\nTitle: {_scan.Title}\nTimestamp edits made here will be saved to the manifest.";
+                : $"File: {Path.GetFileName(dialog.FileName)}\nTitle: {_scan.Title}" +
+                  (loaded.Manifest.Mode.Equals("multi_source_daily", StringComparison.OrdinalIgnoreCase)
+                      ? $"\nSources: {loaded.Manifest.Sources.Count}\nTimestamp edits are kept with each source in this manifest."
+                      : "\nTimestamp edits made here will be saved to the manifest.");
             WriteLog($"Gemini manifest loaded: {dialog.FileName}");
         }
         catch (Exception ex)
@@ -439,12 +449,21 @@ public partial class MainWindow : Window
             {
                 var index = i; // salinan lokal: callback progres berjalan async dan tidak boleh membaca variabel loop
                 var clip = selected[index];
+                var clipUrl = string.IsNullOrWhiteSpace(clip.SourceUrl) ? url : clip.SourceUrl;
+                var clipScan = string.IsNullOrWhiteSpace(clip.SourceTitle)
+                    ? scan
+                    : new ScanResult
+                    {
+                        Title = clip.SourceTitle,
+                        Duration = clip.SourceDurationSeconds ?? 0,
+                        TranscriptSource = scan.TranscriptSource
+                    };
                 SetStatus(index == 0
                     ? $"STATUS: Rendering clip 1/{selected.Count}: {clip.Name}. Batch estimates appear after the first clip."
                     : $"STATUS: Rendering clip {index + 1}/{selected.Count}: {clip.Name}. Estimated batch time remaining: {TimeSpan.FromSeconds((DateTime.Now - batchStarted).TotalSeconds / index * (selected.Count - index)):mm\\:ss}.");
                 WorkProgress.IsIndeterminate = true;
                 var progress = new Progress<JobProgress>(p => OnRenderProgress(p, index, selected.Count));
-                var file = await RenderViaCliAsync(url, scan, clip, ReadStyle(), ReadThumbnailHookStyle(), outputFolder, language, subtitleSource,
+                var file = await RenderViaCliAsync(clipUrl, clipScan, clip, ReadStyle(), ReadThumbnailHookStyle(), outputFolder, language, subtitleSource,
                     framePath, useSubtitles, preserveSourceAspect, useFourByFiveFrame, useNarration, ttsOptions, progress, cts.Token);
                 WorkProgress.IsIndeterminate = false;
                 WorkProgress.Value = (index + 1) * 100.0 / selected.Count;
@@ -529,6 +548,8 @@ public partial class MainWindow : Window
             Title = scan.Title,
             YouTubeTitle = clip.YouTubeTitle,
             YouTubeDescription = clip.YouTubeDescription,
+            Day = clip.PublishDay,
+            Slot = clip.PublishSlot,
             Clip = new ClipperJobClip
             {
                 Id = clip.Name,
@@ -681,7 +702,10 @@ public partial class MainWindow : Window
         SetUploadMetadataEditor(clip);
         ClipDetail.Text = clip.KeptSegments.Count > 0
             ? BuildCondensedDetail(clip)
-            : $"{clip.TimeRange}\n{clip.Hook}\n{clip.Reason}" + (string.IsNullOrWhiteSpace(clip.Caption) ? "" : $"\nCaption: {clip.Caption}\n{clip.Hashtags}") + "\nThe clip uses these exact timestamps.";
+            : $"{clip.TimeRange}\n{clip.Hook}\n{clip.Reason}" +
+              (string.IsNullOrWhiteSpace(clip.Caption) ? "" : $"\nCaption: {clip.Caption}\n{clip.Hashtags}") +
+              (string.IsNullOrWhiteSpace(clip.SourceTitle) ? "" : $"\nSource: {clip.SourceTitle}") +
+              "\nThe clip uses these exact timestamps.";
         StartTimeBox.Text = TimeSpan.FromSeconds(clip.Start).ToString(@"hh\:mm\:ss");
         EndTimeBox.Text = TimeSpan.FromSeconds(clip.End).ToString(@"hh\:mm\:ss");
         RenderButton.IsEnabled = _scan is not null;
@@ -959,6 +983,8 @@ public partial class MainWindow : Window
                 OriginalTitle = originalTitle,
                 OriginalDescription = originalDescription,
                 HasEmbeddedMetadata = !string.IsNullOrWhiteSpace(originalTitle) || !string.IsNullOrWhiteSpace(originalDescription),
+                PublishDay = clip.PublishDay,
+                PublishSlot = clip.PublishSlot,
                 Title = originalTitle,
                 Description = originalDescription,
                 IsSelected = true
@@ -972,6 +998,8 @@ public partial class MainWindow : Window
             item.OriginalTitle = originalTitle;
             item.OriginalDescription = originalDescription;
             item.HasEmbeddedMetadata = !string.IsNullOrWhiteSpace(originalTitle) || !string.IsNullOrWhiteSpace(originalDescription);
+            item.PublishDay = clip.PublishDay;
+            item.PublishSlot = clip.PublishSlot;
             item.Title = originalTitle;
             item.Description = originalDescription;
         }
@@ -1014,6 +1042,8 @@ public partial class MainWindow : Window
                 OriginalTitle = original.Title,
                 OriginalDescription = original.Description,
                 HasEmbeddedMetadata = original.Found,
+                PublishDay = original.Day,
+                PublishSlot = original.Slot,
                 IsSelected = true
             };
             lastAdded.PropertyChanged += UploadItem_PropertyChanged;
@@ -1065,7 +1095,8 @@ public partial class MainWindow : Window
 
             foreach (var clip in loaded.Clips)
             {
-                var outputName = Path.GetFileNameWithoutExtension(ClipPipeline.BuildFileName(loaded.Manifest.Source.Title, clip));
+                var sourceTitle = string.IsNullOrWhiteSpace(clip.SourceTitle) ? loaded.Manifest.Source.Title : clip.SourceTitle;
+                var outputName = Path.GetFileNameWithoutExtension(ClipPipeline.BuildFileName(sourceTitle, clip));
                 if (!fileByName.TryGetValue(outputName, out var videoPath))
                 {
                     unmatched.Add(clip.Name);
@@ -1091,6 +1122,11 @@ public partial class MainWindow : Window
                 var description = string.IsNullOrWhiteSpace(clip.YouTubeDescription) ? loaded.Manifest.YouTubeDescription : clip.YouTubeDescription;
                 if (!string.IsNullOrWhiteSpace(title)) item.Title = title;
                 if (!string.IsNullOrWhiteSpace(description)) item.Description = description;
+                item.OriginalTitle = title ?? string.Empty;
+                item.OriginalDescription = description ?? string.Empty;
+                item.HasEmbeddedMetadata = !string.IsNullOrWhiteSpace(item.OriginalTitle) || !string.IsNullOrWhiteSpace(item.OriginalDescription);
+                item.PublishDay = clip.PublishDay;
+                item.PublishSlot = clip.PublishSlot;
                 item.IsSelected = true;
                 matched++;
             }
@@ -1510,6 +1546,25 @@ public partial class MainWindow : Window
             return;
         }
 
+        var incompatibleCategory = waiting.FirstOrDefault(item => item.PublishSlot > 0
+            && (!TryGetPublishDayOfWeek(item.PublishDay, out var day)
+                || item.PublishSlot > (day is DayOfWeek.Saturday or DayOfWeek.Sunday
+                    ? GetWeekendPublishSlots().Count
+                    : GetWeekdayPublishSlots().Count)));
+        if (incompatibleCategory is not null)
+        {
+            var configured = TryGetPublishDayOfWeek(incompatibleCategory.PublishDay, out var categoryDay)
+                && categoryDay is DayOfWeek.Saturday or DayOfWeek.Sunday
+                    ? GetWeekendPublishSlots().Count
+                    : GetWeekdayPublishSlots().Count;
+            var category = incompatibleCategory.CategoryDisplay;
+            WpfMessageBox.Show(this,
+                $"The category {category} needs slot {incompatibleCategory.PublishSlot}, but only {configured} publishing time(s) are configured for that day type. Add the missing time(s) manually in CUSTOMIZE SLOTS, then run Auto-Schedule again. No schedule was assigned.",
+                "Publishing slot missing", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SetStatus($"STATUS: {category} needs more configured publishing slots.", true);
+            return;
+        }
+
         var firstWaiting = waiting[0];
         var firstWaitingIndex = _uploadItems.IndexOf(firstWaiting);
 
@@ -1544,7 +1599,7 @@ public partial class MainWindow : Window
         {
             cursor = _settings.LastUploadedPublishAt.Value;
         }
-        else
+        else if (waiting.Any(item => item.PublishSlot <= 0 || string.IsNullOrWhiteSpace(item.PublishDay)))
         {
             WpfMessageBox.Show(this,
                 "Video urutan pertama belum memiliki waktu publikasi (Publication Time) dan belum ada riwayat video yang pernah di-upload ke YouTube.\n\n" +
@@ -1552,6 +1607,10 @@ public partial class MainWindow : Window
                 "Auto-Schedule", MessageBoxButton.OK, MessageBoxImage.Information);
             SetStatus("STATUS: Atur waktu publikasi minimal 1 video terlebih dahulu sebagai patokan.", true);
             return;
+        }
+        else
+        {
+            cursor = GetWibNow().AddMinutes(-1);
         }
 
         var occupied = _uploadItems.Where(item => item.PublishAt.HasValue)
@@ -1561,10 +1620,12 @@ public partial class MainWindow : Window
         {
             foreach (var item in waiting)
             {
-                var slot = FindNextScheduleSlot(cursor, occupied);
+                var slot = item.PublishSlot > 0 && !string.IsNullOrWhiteSpace(item.PublishDay)
+                    ? FindNextCategoryScheduleSlot(item.PublishDay, item.PublishSlot, occupied)
+                    : FindNextScheduleSlot(cursor, occupied);
                 item.PublishAt = slot;
                 occupied.Add(slot);
-                cursor = slot;
+                if (item.PublishSlot == 0 || string.IsNullOrWhiteSpace(item.PublishDay)) cursor = slot;
             }
         }
         catch (InvalidOperationException ex)
@@ -1843,6 +1904,64 @@ public partial class MainWindow : Window
             }
         }
         throw new InvalidOperationException("Tidak ditemukan slot publikasi kosong untuk 12 bulan ke depan.");
+    }
+
+    private DateTimeOffset FindNextCategoryScheduleSlot(string dayName, int slotNumber, HashSet<DateTimeOffset> occupied)
+    {
+        if (!TryGetPublishDayOfWeek(dayName, out var targetDay))
+            throw new InvalidOperationException($"Hari publikasi '{dayName}' tidak valid.");
+        var times = targetDay is DayOfWeek.Saturday or DayOfWeek.Sunday
+            ? GetWeekendPublishSlots()
+            : GetWeekdayPublishSlots();
+        if (slotNumber < 1 || slotNumber > times.Count)
+            throw new InvalidOperationException($"Slot {slotNumber} is not configured for {dayName}.");
+
+        var zone = GetWibTimeZone();
+        var now = GetWibNow();
+        var localToday = TimeZoneInfo.ConvertTime(now, zone).Date;
+        for (var dayOffset = 0; dayOffset < 366; dayOffset++)
+        {
+            var date = localToday.AddDays(dayOffset);
+            if (date.DayOfWeek != targetDay) continue;
+            var wallClock = DateTime.SpecifyKind(date.Add(times[slotNumber - 1].ToTimeSpan()), DateTimeKind.Unspecified);
+            var candidate = new DateTimeOffset(wallClock, zone.GetUtcOffset(wallClock));
+            if (candidate <= now || occupied.Contains(candidate)) continue;
+            return candidate;
+        }
+        throw new InvalidOperationException($"Tidak ditemukan jadwal kosong untuk {dayName}_Slot_{slotNumber} dalam 12 bulan ke depan.");
+    }
+
+    private static bool TryGetPublishDayOfWeek(string? dayName, out DayOfWeek day)
+    {
+        day = (dayName ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "senin" => DayOfWeek.Monday,
+            "selasa" => DayOfWeek.Tuesday,
+            "rabu" => DayOfWeek.Wednesday,
+            "kamis" => DayOfWeek.Thursday,
+            "jumat" or "jum'at" => DayOfWeek.Friday,
+            "sabtu" => DayOfWeek.Saturday,
+            "minggu" => DayOfWeek.Sunday,
+            _ => (DayOfWeek)(-1)
+        };
+        return (int)day >= 0;
+    }
+
+    private string? GetSlotCompatibilityWarning(ClipperJobManifest manifest, IReadOnlyCollection<ClipCandidate> clips)
+    {
+        if (manifest.RequestedSlotCount is not { } requested || !clips.Any(clip => clip.PublishSlot > 0)) return null;
+        var days = clips.Where(clip => !string.IsNullOrWhiteSpace(clip.PublishDay)).Select(clip => clip.PublishDay)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var dayName in days)
+        {
+            if (!TryGetPublishDayOfWeek(dayName, out var day)) continue;
+            var configured = day is DayOfWeek.Saturday or DayOfWeek.Sunday
+                ? GetWeekendPublishSlots().Count
+                : GetWeekdayPublishSlots().Count;
+            if (requested > configured)
+                return $"This manifest requests {requested} daily slot(s), but Clipper98 currently has {configured} time(s) configured for {dayName}. Add the missing time(s) manually under CUSTOMIZE SLOTS. Rendering will still work; Auto-Schedule will wait until the needed slots are configured.";
+        }
+        return null;
     }
 
     private static readonly TimeOnly[] DefaultWeekdayPublishSlots =
@@ -2604,7 +2723,7 @@ public partial class MainWindow : Window
         PreviewThumbnailImage.Visibility = Visibility.Collapsed;
         PreviewPlaceholder.Visibility = PreviewBackdrop.Source is null ? Visibility.Visible : Visibility.Collapsed;
         PreviewPlaceholderStatusText.Text = "Enter a YouTube URL or import a Gemini manifest to preview the video frame.";
-        PreviewStatusText.Text = "Video frame and subtitle preview";
+        PreviewStatusText.Text = "Subtitle style sample · actual words follow the clip audio.";
     }
 
     private void PreviewMode_Changed(object sender, SelectionChangedEventArgs e)
@@ -2633,11 +2752,19 @@ public partial class MainWindow : Window
         try
         {
             await Task.Delay(350, ct);
-            if (ClipList.SelectedItem is not ClipCandidate clip || _scan is null || !IsYouTubeUrl(UrlBox.Text.Trim()))
+            if (ClipList.SelectedItem is not ClipCandidate clip || _scan is null)
             {
                 PreviewThumbnailImage.Source = null;
                 PreviewStatusText.Text = "Select a clip to render its exact thumbnail preview.";
                 PreviewPlaceholderStatusText.Text = "Import a Gemini manifest and select a clip.";
+                UpdatePreview();
+                return;
+            }
+            var previewUrl = string.IsNullOrWhiteSpace(clip.SourceUrl) ? UrlBox.Text.Trim() : clip.SourceUrl;
+            if (!IsYouTubeUrl(previewUrl))
+            {
+                PreviewThumbnailImage.Source = null;
+                PreviewStatusText.Text = "Select a clip with a valid YouTube source.";
                 UpdatePreview();
                 return;
             }
@@ -2673,7 +2800,7 @@ public partial class MainWindow : Window
                 KeptSegments = clip.KeptSegments
             };
             var bytes = await _pipeline.RenderThumbnailPreviewAsync(
-                UrlBox.Text.Trim(), previewClip, hookText, ReadThumbnailHookStyle(), preserveSourceAspect,
+                previewUrl, previewClip, hookText, ReadThumbnailHookStyle(), preserveSourceAspect,
                 useFourByFive, progress, ct);
             if (ct.IsCancellationRequested || !ReferenceEquals(_thumbnailPreviewCts, cancellation)) return;
             using var stream = new MemoryStream(bytes);
@@ -2840,7 +2967,9 @@ public partial class MainWindow : Window
                 Caption = clip.Caption,
                 Hashtags = clip.Hashtags.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
                 YouTubeTitle = clip.YouTubeTitle,
-                YouTubeDescription = clip.YouTubeDescription
+                YouTubeDescription = clip.YouTubeDescription,
+                Day = clip.PublishDay,
+                Slot = clip.PublishSlot
             }).ToList();
         }
     }

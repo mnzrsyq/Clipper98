@@ -55,3 +55,5 @@ Pada penggunaan pertama, buka **SETUP** lalu pilih **UNDUH KOMPONEN KURANG**. Cl
 5. Klik **UPLOAD SCHEDULED VIDEOS**. Video dikirim sebagai Private dengan waktu tayang terjadwal; audience default-nya **Not Made for Kids**.
 
 Status jadwal hanya disimpan dalam antrean lokal di PC ini. Auto-Schedule tidak membaca jadwal yang dibuat dari PC lain atau YouTube Studio.
+
+Manifest dengan field `day` dan `slot` per klip mengikuti kategori hari-slot saat Auto-Schedule. Klip kategori sama berikutnya dijadwalkan di minggu berikutnya. Tambah/kurangi jam slot secara manual lewat **CUSTOMIZE SLOTS**; jumlah slot pada manifest yang belum tersedia harus ditambahkan sebelum Auto-Schedule. Kedua field kategori opsional, sehingga manifest Clipper biasa tetap bisa dipakai untuk membuat klip tanpa mengunggah.

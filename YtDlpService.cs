@@ -12,7 +12,7 @@ public sealed class YtDlpService
     private static readonly bool ForceKeyframesAtCuts = false;
 
     private const string FormatSelector =
-        "bestvideo[height<=1080][vcodec^=avc1][protocol^=m3u8]+bestaudio[protocol^=m3u8]/bestvideo[height<=1080][protocol^=m3u8]+bestaudio[protocol^=m3u8]/bestvideo[height<=1080][vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]";
+        "bestvideo[height<=1080][fps<=30][vcodec^=avc1][protocol^=m3u8]+bestaudio[protocol^=m3u8]/bestvideo[height<=1080][fps<=30][protocol^=m3u8]+bestaudio[protocol^=m3u8]/bestvideo[height<=1080][fps<=30][vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][fps<=30]";
 
     private static readonly Regex NumberPattern = new(@"\d+(?:[.,]\d+)?", RegexOptions.Compiled);
     private static readonly Regex FfmpegTime = new(@"time=(\d+):(\d+):(\d+(?:\.\d+)?)", RegexOptions.Compiled);
